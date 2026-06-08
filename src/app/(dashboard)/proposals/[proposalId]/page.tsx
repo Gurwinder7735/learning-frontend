@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Tag, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, Drawer, message } from "antd";
-import { ArrowLeft, FileText, Edit3, Save, Trash2, Copy, Loader2, CheckCircle, Sparkles } from "lucide-react";
+import { Button, Tag, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, Drawer, message, Divider } from "antd";
+import { ArrowLeft, FileText, Edit3, Save, Trash2, Copy, Loader2, CheckCircle, XCircle, Sparkles, PenLine, Send, ShieldCheck } from "lucide-react";
 import { MarkdownRenderer } from "@/components/features/ProposalIntelligence/MarkdownRenderer";
 import { AgentExecutionPanel } from "@/components/features/ProposalIntelligence/AgentExecutionPanel";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -15,10 +15,12 @@ import {
   selectProposalDetail,
 } from "@/store/modules/proposals/proposalsSelectors";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
+import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { selectClients } from "@/store/modules/clients/clientsSelectors";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
 import { storage } from "@/lib/utils/storage";
 import type { ContractJob as ContractJobType } from "@/types/models/Contract";
+import type { SignatureStatus } from "@/types/models/Proposal";
 
 const statusColors: Record<string, string> = {
   draft: "default", internal_review: "blue", sent: "purple",
@@ -86,6 +88,63 @@ export default function ProposalDetailPage() {
   const [contractGenLoading, setContractGenLoading] = useState(false);
   const [contractJob, setContractJob] = useState<ContractJobType | null>(null);
   const contractPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [signatureStatus, setSignatureStatus] = useState<SignatureStatus | null>(null);
+  const [signSending, setSignSending] = useState(false);
+  const [internalSigning, setInternalSigning] = useState(false);
+
+  const fetchSignatureStatus = async () => {
+    try {
+      const token = storage.getAccessToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.proposals.signatureStatus(proposalId)}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        setSignatureStatus(json.data);
+      }
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    if (proposalId) fetchSignatureStatus();
+  }, [proposalId]);
+
+  const handleSendForSigning = async () => {
+    setSignSending(true);
+    try {
+      const token = storage.getAccessToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.proposals.sendForSigning(proposalId)}`, { method: "POST", headers });
+      if (!res.ok) throw new Error("Failed");
+      message.success("Proposal sent for signing");
+      await fetchSignatureStatus();
+    } catch {
+      message.error("Failed to send for signing");
+    } finally {
+      setSignSending(false);
+    }
+  };
+
+  const handleSignInternal = async () => {
+    setInternalSigning(true);
+    try {
+      const token = storage.getAccessToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.proposals.signInternal(proposalId)}`, {
+        method: "POST", headers, body: JSON.stringify({ action: "accept" }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      message.success("You have signed this proposal");
+      await fetchSignatureStatus();
+    } catch {
+      message.error("Failed to sign");
+    } finally {
+      setInternalSigning(false);
+    }
+  };
 
   useEffect(() => {
     if (proposalId) dispatch(fetchProposalDetailRequest(proposalId));
@@ -347,9 +406,14 @@ export default function ProposalDetailPage() {
                 <Tag color={statusColors[proposal.status] || "default"} className="!rounded-full !px-3 !py-0.5 !text-xs whitespace-nowrap shrink-0">{statusLabels[proposal.status] || proposal.status}</Tag>
                 <Tag className="!rounded-full !px-2 !py-0 !text-xs whitespace-nowrap shrink-0">v{proposal.version}</Tag>
                 {proposal.isAiGenerated && <Tag color="purple" className="!rounded-full !px-2 !py-0 !text-xs !border-purple-200 !bg-purple-50 !text-purple-700 whitespace-nowrap shrink-0">AI Generated</Tag>}
-                {proposal.signedBy && (
-                  <Tag color="green" className="!rounded-full !px-2 !py-0 !text-xs !inline-flex !items-center !gap-1 whitespace-nowrap shrink-0">
-                    <CheckCircle className="w-3 h-3" /> Signed by {proposal.signedBy}
+                {signatureStatus?.signingStatus === "fully_signed" && (
+                  <Tag color="green" className="!rounded-full !px-2 !py-0 !text-xs whitespace-nowrap !inline-flex !items-center !gap-1 shrink-0">
+                    <CheckCircle className="w-3 h-3 shrink-0" /> Fully Signed
+                  </Tag>
+                )}
+                {signatureStatus?.signingStatus === "declined" && (
+                  <Tag color="red" className="!rounded-full !px-2 !py-0 !text-xs whitespace-nowrap !inline-flex !items-center !gap-1 shrink-0">
+                    <XCircle className="w-3 h-3 shrink-0" /> Declined
                   </Tag>
                 )}
                 {(proposal.isAiGenerated && (jobStatus === "running" || jobStatus === "pending")) && (
@@ -385,6 +449,57 @@ export default function ProposalDetailPage() {
           </div>
         </div>
       </div>
+
+      {signatureStatus && (
+        <div className="mb-6 bg-white rounded-xl border border-zinc-200 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-zinc-500" />
+              <Typography.Text className="text-sm font-semibold text-zinc-700">Signature Status</Typography.Text>
+            </div>
+            <Tag color={
+              signatureStatus.signingStatus === "fully_signed" ? "green" :
+              signatureStatus.signingStatus === "declined" ? "red" :
+              signatureStatus.signingStatus === "awaiting_client" ? "orange" :
+              signatureStatus.signingStatus === "partially_signed" ? "purple" : "default"
+            } className="!rounded-full !px-3 !py-0.5">
+              {signatureStatus.signingStatus.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+            </Tag>
+          </div>
+          {signatureStatus.signatures.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {signatureStatus.signatures.map((sig, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                  <Typography.Text className="text-zinc-700">
+                    <strong>{sig.signerName}</strong> ({sig.role === "client" ? "Client" : "Internal"})
+                  </Typography.Text>
+                  <Typography.Text className="text-zinc-400 text-xs">
+                    {new Date(sig.signedAt).toLocaleDateString()}
+                  </Typography.Text>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {signatureStatus.nextExpectedSigner === "send_for_signing" && (
+              <Button size="small" type="primary" icon={<Send className="w-3 h-3" />} loading={signSending} onClick={handleSendForSigning}>
+                Send for Signing
+              </Button>
+            )}
+            {signatureStatus.nextExpectedSigner === "internal" && (
+              <Button size="small" type="primary" icon={<PenLine className="w-3 h-3" />} loading={internalSigning} onClick={handleSignInternal}>
+                Sign as Internal
+              </Button>
+            )}
+            {signatureStatus.nextExpectedSigner === "client" && proposal.shareToken && (
+              <Button size="small" icon={<Copy className="w-3 h-3" />} onClick={copyShareLink}>
+                Copy Share Link
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {proposal.isAiGenerated && jobStatus === "running" ? (
         <div className="max-w-2xl mx-auto py-8">

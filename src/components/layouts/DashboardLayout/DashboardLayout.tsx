@@ -13,7 +13,6 @@ import {
   Calendar,
   FileCheck,
   Scale,
-  FolderKanban,
   PiggyBank,
   BookOpen,
   FileSignature,
@@ -50,7 +49,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const navigation = [
     { name: "Clients", href: APP_ROUTES.clients, icon: Building2 },
     { name: "Proposals", href: APP_ROUTES.proposals, icon: FileCheck },
-    { name: "Projects", href: APP_ROUTES.projects, icon: FolderKanban },
     ...(isAdmin ? [{ name: "Users", href: APP_ROUTES.users, icon: Users }] : []),
   ];
 

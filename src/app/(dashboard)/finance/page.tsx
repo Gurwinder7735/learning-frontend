@@ -10,8 +10,6 @@ import { selectFinanceStats, selectFinanceInvoices, selectFinancePayments, selec
 import { fetchFinanceStatsRequest, fetchInvoicesRequest, fetchPaymentsRequest, createInvoiceRequest, updateInvoiceRequest, createPaymentRequest } from "@/store/modules/finance/financeSlice";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
 import { selectClients } from "@/store/modules/clients/clientsSelectors";
-import { fetchProjectsRequest } from "@/store/modules/projects/projectsSlice";
-import { selectProjects } from "@/store/modules/projects/projectsSelectors";
 import type { Invoice, Payment } from "@/types/models/Finance";
 
 const invoiceStatusColors: Record<string, string> = {
@@ -33,32 +31,24 @@ export default function FinancePage() {
   const payments = useAppSelector(selectFinancePayments);
   const loading = useAppSelector(selectFinanceLoading);
   const clients = useAppSelector(selectClients);
-  const projects = useAppSelector(selectProjects);
 
   const [filterClientId, setFilterClientId] = useState<string | undefined>();
-  const [filterProjectId, setFilterProjectId] = useState<string | undefined>();
   const [invoiceDrawerOpen, setInvoiceDrawerOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [invoiceForm] = Form.useForm();
   const [paymentForm] = Form.useForm();
-
-  const filteredProjects = useMemo(
-    () => projects.filter((p) => !filterClientId || p.clientId === filterClientId),
-    [projects, filterClientId],
-  );
 
   useEffect(() => {
     dispatch(fetchFinanceStatsRequest());
     dispatch(fetchInvoicesRequest({}));
     dispatch(fetchPaymentsRequest({}));
     dispatch(fetchClientsRequest({ limit: 200 }));
-    dispatch(fetchProjectsRequest({ limit: 200 }));
   }, [dispatch]);
 
   useEffect(() => {
-    dispatch(fetchInvoicesRequest({ clientId: filterClientId, projectId: filterProjectId }));
-    dispatch(fetchPaymentsRequest({ clientId: filterClientId, projectId: filterProjectId }));
-  }, [dispatch, filterClientId, filterProjectId]);
+    dispatch(fetchInvoicesRequest({ clientId: filterClientId }));
+    dispatch(fetchPaymentsRequest({ clientId: filterClientId }));
+  }, [dispatch, filterClientId]);
 
   const handleCreateInvoice = async () => {
     try {
@@ -89,10 +79,6 @@ export default function FinancePage() {
   };
 
   const clientOptions = clients.map((c) => ({ value: c.id, label: c.companyName }));
-  const projectOptions = (selectedClient?: string) =>
-    projects
-      .filter((p) => !selectedClient || p.clientId === selectedClient)
-      .map((p) => ({ value: p.id, label: p.name }));
 
   const invoiceColumns = [
     { title: "Invoice #", dataIndex: "invoiceNumber", key: "invoiceNumber", render: (v: string) => <span className="font-medium">{v}</span> },

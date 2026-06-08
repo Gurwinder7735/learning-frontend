@@ -2,34 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, List, Upload, App, Dropdown, Row, Col, Statistic } from "antd";
-import type { UploadFile } from "antd/es/upload";
-import { ArrowLeft, Building2, Globe, MapPin, Briefcase, Clock, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, UserPlus, MoreHorizontal, Upload as UploadIcon, FileText, Calendar, CheckSquare, Scale, AlertTriangle, FolderKanban, PiggyBank, DollarSign, TrendingUp, Percent } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, List, App, Dropdown } from "antd";
+import { ArrowLeft, Building2, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, UserPlus, MoreHorizontal } from "lucide-react";
 import { INDUSTRY_OPTIONS, COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
-import type { Client, Contact } from "@/types/models/Client";
-import type { Document } from "@/types/models/Document";
-import type { Meeting } from "@/types/models/Meeting";
-import type { Proposal } from "@/types/models/Proposal";
-import type { LegalDocument } from "@/types/models/Legal";
-import type { Project } from "@/types/models/Project";
+import type { Contact } from "@/types/models/Client";
 import { fetchClientDetailRequest, clearClientDetail, updateClientRequest, deleteClientRequest, addContactRequest, updateContactRequest, removeContactRequest } from "@/store/modules/clients/clientsSlice";
-import { selectClientDetail, selectClientContacts, selectClientActivities } from "@/store/modules/clients/clientsSelectors";
-import { uploadDocumentRequest, fetchDocumentsRequest } from "@/store/modules/documents/documentsSlice";
-import { selectDocuments } from "@/store/modules/documents/documentsSelectors";
-import { fetchMeetingsRequest } from "@/store/modules/meetings/meetingsSlice";
-import { selectMeetings } from "@/store/modules/meetings/meetingsSelectors";
-import { fetchProposalsRequest } from "@/store/modules/proposals/proposalsSlice";
-import { selectProposals } from "@/store/modules/proposals/proposalsSelectors";
-import { fetchLegalRequest } from "@/store/modules/legal/legalSlice";
-import { selectLegal } from "@/store/modules/legal/legalSelectors";
-import { fetchProjectsRequest } from "@/store/modules/projects/projectsSlice";
-import { selectProjects } from "@/store/modules/projects/projectsSelectors";
-import { fetchClientFinanceSummaryRequest, clearClientFinanceSummary } from "@/store/modules/finance/financeSlice";
-import { selectClientFinanceSummary } from "@/store/modules/finance/financeSelectors";
+import { selectClientDetail, selectClientContacts } from "@/store/modules/clients/clientsSelectors";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
 
 const statusColors: Record<string, string> = {
@@ -39,72 +19,6 @@ const statusColors: Record<string, string> = {
   inactive: "red",
 };
 
-const fileTypeIcons: Record<string, string> = {
-  pdf: "📄", docx: "📝", xlsx: "📊", png: "🖼", jpg: "🖼", jpeg: "🖼", gif: "🎨", webp: "🖼", svg: "🎨", zip: "📦",
-};
-
-const docCategoryColors: Record<string, string> = {
-  proposal: "blue", nda: "red", contract: "purple", invoice: "green", technical: "cyan", meeting_notes: "orange", general: "default",
-};
-
-const docCategoryLabels: Record<string, string> = {
-  proposal: "Proposal", nda: "NDA", contract: "Contract", invoice: "Invoice", technical: "Technical", meeting_notes: "Meeting Notes", general: "General",
-};
-
-const meetingTypeColors: Record<string, string> = {
-  discovery: "blue", weekly_sync: "green", demo: "purple", planning: "orange", review: "cyan", internal: "geekblue", other: "default",
-};
-
-const meetingTypeLabels: Record<string, string> = {
-  discovery: "Discovery", weekly_sync: "Weekly Sync", demo: "Demo", planning: "Planning", review: "Review", internal: "Internal", other: "Other",
-};
-
-const proposalStatusColors: Record<string, string> = {
-  draft: "default", internal_review: "blue", sent: "purple", client_review: "orange", approved: "green", rejected: "red", archived: "default",
-};
-
-const proposalStatusLabels: Record<string, string> = {
-  draft: "Draft", internal_review: "Internal Review", sent: "Sent", client_review: "Client Review", approved: "Approved", rejected: "Rejected", archived: "Archived",
-};
-
-const legalTypeColors: Record<string, string> = {
-  nda: "blue", mutual_nda: "cyan", contractor_agreement: "orange",
-  service_agreement: "purple", msa: "geekblue", sow: "green",
-  change_request: "gold", amendment: "magenta",
-};
-
-const legalTypeLabels: Record<string, string> = {
-  nda: "NDA", mutual_nda: "Mutual NDA", contractor_agreement: "Contractor Agreement",
-  service_agreement: "Service Agreement", msa: "MSA", sow: "SOW",
-  change_request: "Change Request", amendment: "Amendment",
-};
-
-const legalStatusColors: Record<string, string> = {
-  draft: "default", sent: "purple", signed: "green", expired: "red", cancelled: "default",
-};
-
-const legalStatusLabels: Record<string, string> = {
-  draft: "Draft", sent: "Sent", signed: "Signed", expired: "Expired", cancelled: "Cancelled",
-};
-
-const projectStatusColors: Record<string, string> = {
-  planning: "blue", active: "green", on_hold: "orange", completed: "default", cancelled: "red",
-};
-const projectStatusLabels: Record<string, string> = {
-  planning: "Planning", active: "Active", on_hold: "On Hold", completed: "Completed", cancelled: "Cancelled",
-};
-const projectHealthColors: Record<string, string> = { healthy: "green", attention_needed: "orange", at_risk: "red" };
-const projectHealthLabels: Record<string, string> = { healthy: "Healthy", attention_needed: "Attention Needed", at_risk: "At Risk" };
-
-const invoiceStatusColors: Record<string, string> = {
-  draft: "default", sent: "purple", paid: "green", overdue: "red", cancelled: "default",
-};
-const invoiceStatusLabels: Record<string, string> = {
-  draft: "Draft", sent: "Sent", paid: "Paid", overdue: "Overdue", cancelled: "Cancelled",
-};
-const paymentTypeLabels: Record<string, string> = {
-  advance: "Advance", milestone: "Milestone", final_payment: "Final Payment", maintenance: "Maintenance", other: "Other",
-};
 const sourceLabels: Record<string, string> = {
   referral: "Referral",
   linkedin: "LinkedIn",
@@ -123,7 +37,6 @@ export default function ClientDetailPage() {
   const dispatch = useAppDispatch();
   const detail = useAppSelector(selectClientDetail);
   const contacts = useAppSelector(selectClientContacts);
-  const activities = useAppSelector(selectClientActivities);
 
   const clientId = params.clientId as string;
   const client = detail?.client ?? null;
@@ -131,50 +44,16 @@ export default function ClientDetailPage() {
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [docUploadOpen, setDocUploadOpen] = useState(false);
-  const [docFileList, setDocFileList] = useState<UploadFile[]>([]);
   const [editForm] = Form.useForm();
   const [contactForm] = Form.useForm();
-  const [docForm] = Form.useForm();
   const [editCountry, setEditCountry] = useState<string>();
-
-  const clientDocuments = useAppSelector(selectDocuments);
-  const clientMeetings = useAppSelector(selectMeetings);
-  const clientProposals = useAppSelector(selectProposals);
-  const clientLegalDocs = useAppSelector(selectLegal);
-  const clientProjects = useAppSelector(selectProjects);
-  const clientFinanceSummary = useAppSelector(selectClientFinanceSummary);
 
   useEffect(() => {
     if (clientId) {
       dispatch(fetchClientDetailRequest(clientId));
-      dispatch(fetchDocumentsRequest({ clientId, limit: 50 }));
-      dispatch(fetchMeetingsRequest({ clientId, limit: 50 }));
-      dispatch(fetchProposalsRequest({ clientId, limit: 50 }));
-      dispatch(fetchLegalRequest({ clientId, limit: 50 }));
-      dispatch(fetchProjectsRequest({ clientId, limit: 50 }));
-      dispatch(fetchClientFinanceSummaryRequest(clientId));
     }
-    return () => { dispatch(clearClientDetail()); dispatch(clearClientFinanceSummary()); };
+    return () => { dispatch(clearClientDetail()); };
   }, [clientId, dispatch]);
-
-  const handleDocUpload = async () => {
-    try {
-      const values = await docForm.validateFields();
-      const file = docFileList[0]?.originFileObj;
-      if (!file) return;
-      dispatch(uploadDocumentRequest({
-        file,
-        name: values.name,
-        category: values.category || "general",
-        clientId,
-        tags: values.tags || "",
-      }));
-      setDocUploadOpen(false);
-      setDocFileList([]);
-      docForm.resetFields();
-    } catch {}
-  };
 
   const handleUpdate = async () => {
     try {
@@ -308,312 +187,7 @@ export default function ClientDetailPage() {
                     <Typography.Paragraph className="!text-zinc-700 !whitespace-pre-wrap">{client.internalNotes}</Typography.Paragraph>
                   </Card>
                 )}
-
-                <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                  <div className="flex items-center justify-between w-full">
-                    <span>Activity Timeline</span>
-                  </div>
-                }>
-                  {activities.length === 0 ? (
-                    <Empty description="No activity yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                  ) : (
-                    <List
-                      dataSource={activities}
-                      renderItem={(activity) => (
-                        <List.Item className="!border-zinc-100 !py-3">
-                          <div className="flex items-start gap-3 w-full">
-                            <div className="w-2 h-2 rounded-full bg-zinc-300 mt-2 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <Typography.Text className="text-sm text-zinc-900">{activity.description}</Typography.Text>
-                              <br />
-                              <Typography.Text className="text-xs text-zinc-400">
-                                {new Date(activity.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                              </Typography.Text>
-                            </div>
-                          </div>
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </Card>
               </div>
-            ),
-          },
-          {
-            key: "documents",
-            label: `Documents (${clientDocuments.length})`,
-            children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Documents</span>
-                  <Button type="primary" size="small" icon={<UploadIcon className="w-4 h-4" />} onClick={() => setDocUploadOpen(true)}>
-                    Upload Document
-                  </Button>
-                </div>
-              }>
-                {clientDocuments.length === 0 ? (
-                  <Empty description="No documents for this client" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Button type="primary" icon={<Plus className="w-4 h-4" />} onClick={() => setDocUploadOpen(true)}>
-                      Upload Document
-                    </Button>
-                  </Empty>
-                ) : (
-                  <div className="divide-y divide-zinc-100">
-                    {clientDocuments.map((doc: Document) => (
-                      <Link key={doc.id} href={`${APP_ROUTES.documents}/${doc.id}`} className="flex items-center gap-4 py-3 px-2 hover:bg-zinc-50 rounded-lg transition-colors group">
-                        <span className="text-xl shrink-0">{fileTypeIcons[doc.fileType] || "📄"}</span>
-                        <div className="flex-1 min-w-0">
-                          <Typography.Text className="text-sm font-medium text-zinc-900 group-hover:text-blue-600 transition-colors block truncate">{doc.name}</Typography.Text>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <Tag color={docCategoryColors[doc.category] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none">{docCategoryLabels[doc.category] || doc.category}</Tag>
-                            <Typography.Text className="text-xs text-zinc-400">{new Date(doc.createdAt).toLocaleDateString()}</Typography.Text>
-                            {doc.tags?.slice(0, 2).map((t: string) => <Tag key={t} className="!text-[10px] !px-1.5 !py-0 !leading-none !rounded-full">{t}</Tag>)}
-                          </div>
-                        </div>
-                        <Typography.Text className="text-xs text-zinc-400 shrink-0">{doc.fileType.toUpperCase()}</Typography.Text>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ),
-          },
-          {
-            key: "meetings",
-            label: `Meetings (${clientMeetings.length})`,
-            children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Meeting History</span>
-                  <Link href={`${APP_ROUTES.meetings}?clientId=${clientId}`}>
-                    <Button type="primary" size="small" icon={<Calendar className="w-4 h-4" />}>View All</Button>
-                  </Link>
-                </div>
-              }>
-                {clientMeetings.length === 0 ? (
-                  <Empty description="No meetings for this client" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Link href={`${APP_ROUTES.meetings}?clientId=${clientId}`}>
-                      <Button type="primary" icon={<Plus className="w-4 h-4" />}>Schedule Meeting</Button>
-                    </Link>
-                  </Empty>
-                ) : (
-                  <div className="divide-y divide-zinc-100">
-                    {clientMeetings.map((m: Meeting) => (
-                      <Link key={m.id} href={`${APP_ROUTES.meetings}/${m.id}`} className="flex items-center gap-4 py-3 px-2 hover:bg-zinc-50 rounded-lg transition-colors group">
-                        <div className="w-9 h-9 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0">
-                          <Calendar className="w-4 h-4 text-zinc-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <Typography.Text className="text-sm font-medium text-zinc-900 group-hover:text-blue-600 transition-colors block truncate">{m.title}</Typography.Text>
-                          <div className="flex items-center gap-2 mt-0.5 text-xs text-zinc-500">
-                            <span>{new Date(m.meetingDate).toLocaleDateString()}</span>
-                            <Tag color={meetingTypeColors[m.meetingType] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none">{meetingTypeLabels[m.meetingType] || m.meetingType}</Tag>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-zinc-400 shrink-0">
-                          <span className="flex items-center gap-1"><CheckSquare className="w-3 h-3" />{m.actionItemCount}</span>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ),
-          },
-          {
-            key: "proposals",
-            label: `Proposals (${clientProposals.length})`,
-            children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Proposals</span>
-                  <Link href={`${APP_ROUTES.proposals}?clientId=${clientId}`}>
-                    <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />}>New Proposal</Button>
-                  </Link>
-                </div>
-              }>
-                {clientProposals.length === 0 ? (
-                  <Empty description="No proposals for this client" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Link href={`${APP_ROUTES.proposals}?clientId=${clientId}`}>
-                      <Button type="primary" icon={<Plus className="w-4 h-4" />}>Create Proposal</Button>
-                    </Link>
-                  </Empty>
-                ) : (
-                  <div className="divide-y divide-zinc-100">
-                    {clientProposals.map((p: Proposal) => (
-                      <Link key={p.id} href={`${APP_ROUTES.proposals}/${p.id}`} className="flex items-center gap-4 py-3 px-2 hover:bg-zinc-50 rounded-lg transition-colors group">
-                        <div className="w-9 h-9 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0">
-                          <FileText className="w-4 h-4 text-zinc-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <Typography.Text className="text-sm font-medium text-zinc-900 group-hover:text-blue-600 transition-colors block truncate">{p.name}</Typography.Text>
-                          <div className="flex items-center gap-2 mt-0.5 text-xs text-zinc-500">
-                            <Tag color={proposalStatusColors[p.status] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none">{proposalStatusLabels[p.status] || p.status}</Tag>
-                            <span>v{p.version}</span>
-                          </div>
-                        </div>
-                        {p.pricing && p.pricing.cost > 0 && (
-                          <Typography.Text className="text-xs font-medium text-zinc-600 shrink-0">{p.pricing.currency} {p.pricing.cost.toLocaleString()}</Typography.Text>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ),
-          },
-          {
-            key: "legal",
-            label: `Legal (${clientLegalDocs.length})`,
-            children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Legal Documents</span>
-                  <Link href={`${APP_ROUTES.legal}?clientId=${clientId}`}>
-                    <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />}>New Document</Button>
-                  </Link>
-                </div>
-              }>
-                {clientLegalDocs.length === 0 ? (
-                  <Empty description="No legal documents for this client" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Link href={`${APP_ROUTES.legal}?clientId=${clientId}`}>
-                      <Button type="primary" icon={<Plus className="w-4 h-4" />}>Create Document</Button>
-                    </Link>
-                  </Empty>
-                ) : (
-                  <div className="divide-y divide-zinc-100">
-                    {clientLegalDocs.map((d: LegalDocument) => (
-                      <Link key={d.id} href={`${APP_ROUTES.legal}/${d.id}`} className="flex items-center gap-4 py-3 px-2 hover:bg-zinc-50 rounded-lg transition-colors group">
-                        <div className="w-9 h-9 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0">
-                          <Scale className="w-4 h-4 text-zinc-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <Typography.Text className="text-sm font-medium text-zinc-900 group-hover:text-blue-600 transition-colors block truncate">{d.name}</Typography.Text>
-                          <div className="flex items-center gap-2 mt-0.5 text-xs text-zinc-500">
-                            <Tag color={legalTypeColors[d.documentType] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none">{legalTypeLabels[d.documentType] || d.documentType}</Tag>
-                            <Tag color={legalStatusColors[d.status] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none">{legalStatusLabels[d.status] || d.status}</Tag>
-                          </div>
-                        </div>
-                        {d.expiryDate && new Date(d.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) && new Date(d.expiryDate) > new Date() && (
-                          <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0" />
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ),
-          },
-          {
-            key: "projects",
-            label: `Projects (${clientProjects.length})`,
-            children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Projects</span>
-                  <Link href={`${APP_ROUTES.projects}?clientId=${clientId}`}>
-                    <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />}>New Project</Button>
-                  </Link>
-                </div>
-              }>
-                {clientProjects.length === 0 ? (
-                  <Empty description="No projects for this client" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Link href={`${APP_ROUTES.projects}?clientId=${clientId}`}>
-                      <Button type="primary" icon={<Plus className="w-4 h-4" />}>Create Project</Button>
-                    </Link>
-                  </Empty>
-                ) : (
-                  <div className="divide-y divide-zinc-100">
-                    {clientProjects.map((p: Project) => (
-                      <Link key={p.id} href={`${APP_ROUTES.projects}/${p.id}`} className="flex items-center gap-4 py-3 px-2 hover:bg-zinc-50 rounded-lg transition-colors group">
-                        <div className="w-9 h-9 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0">
-                          <FolderKanban className="w-4 h-4 text-zinc-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <Typography.Text className="text-sm font-medium text-zinc-900 group-hover:text-blue-600 transition-colors block truncate">{p.name}</Typography.Text>
-                          <div className="flex items-center gap-2 mt-0.5 text-xs text-zinc-500">
-                            <Tag color={projectStatusColors[p.status] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none">{projectStatusLabels[p.status] || p.status}</Tag>
-                            <Tag color={projectHealthColors[p.health] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none">{projectHealthLabels[p.health] || p.health}</Tag>
-                          </div>
-                        </div>
-                        {p.targetDate && (
-                          <Typography.Text className={`text-xs shrink-0 ${new Date(p.targetDate) < new Date() && (p.status === "active" || p.status === "planning") ? "text-red-500 font-medium" : "text-zinc-400"}`}>
-                            {new Date(p.targetDate).toLocaleDateString()}
-                          </Typography.Text>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ),
-          },
-          {
-            key: "finance",
-            label: `Finance`,
-            children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title="Financial Summary">
-                {!clientFinanceSummary ? (
-                  <Spin />
-                ) : (
-                  <div className="space-y-6">
-                    <Row gutter={[16, 16]}>
-                      <Col xs={12} sm={6}>
-                        <Card className="!rounded-xl !border-zinc-100" size="small">
-                          <Statistic title="Total Contract Value" prefix={<DollarSign className="w-4 h-4 text-zinc-400 mr-1" />} value={clientFinanceSummary.totalContractValue} precision={2} />
-                        </Card>
-                      </Col>
-                      <Col xs={12} sm={6}>
-                        <Card className="!rounded-xl !border-zinc-100" size="small">
-                          <Statistic title="Total Received" prefix={<TrendingUp className="w-4 h-4 text-green-500 mr-1" />} value={clientFinanceSummary.totalReceived} precision={2} valueStyle={{ color: "#16a34a" }} />
-                        </Card>
-                      </Col>
-                      <Col xs={12} sm={6}>
-                        <Card className="!rounded-xl !border-zinc-100" size="small">
-                          <Statistic title="Remaining Balance" prefix={<Clock className="w-4 h-4 text-orange-500 mr-1" />} value={clientFinanceSummary.remainingBalance} precision={2} valueStyle={{ color: clientFinanceSummary.remainingBalance > 0 ? "#ea580c" : undefined }} />
-                        </Card>
-                      </Col>
-                      <Col xs={12} sm={6}>
-                        <Card className="!rounded-xl !border-zinc-100" size="small">
-                          <Statistic title="Completion" prefix={<Percent className="w-4 h-4 text-blue-500 mr-1" />} value={clientFinanceSummary.completionPercentage} suffix="%" precision={1} />
-                        </Card>
-                      </Col>
-                    </Row>
-                    <Typography.Title level={5}>Invoices</Typography.Title>
-                    {clientFinanceSummary.invoices.length === 0 ? (
-                      <Empty description="No invoices" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                    ) : (
-                      <div className="divide-y divide-zinc-100">
-                        {clientFinanceSummary.invoices.map((inv) => (
-                          <div key={inv.id} className="flex items-center justify-between py-3 px-2">
-                            <div>
-                              <Typography.Text className="font-medium">#{inv.invoiceNumber}</Typography.Text>
-                              <Tag color={invoiceStatusColors[inv.status] || "default"} className="!ml-2 !text-[10px] !px-1.5 !py-0">{invoiceStatusLabels[inv.status] || inv.status}</Tag>
-                            </div>
-                            <Typography.Text>{inv.currency} {inv.amount.toLocaleString()}</Typography.Text>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <Typography.Title level={5}>Payments</Typography.Title>
-                    {clientFinanceSummary.payments.length === 0 ? (
-                      <Empty description="No payments" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                    ) : (
-                      <div className="divide-y divide-zinc-100">
-                        {clientFinanceSummary.payments.map((pay) => (
-                          <div key={pay.id} className="flex items-center justify-between py-3 px-2">
-                            <div>
-                              <Typography.Text className="font-medium">{paymentTypeLabels[pay.paymentType] || pay.paymentType}</Typography.Text>
-                              <Typography.Text className="text-xs text-zinc-400 ml-2">{new Date(pay.paymentDate).toLocaleDateString()}</Typography.Text>
-                            </div>
-                            <Typography.Text className="text-green-600 font-medium">{pay.currency} {pay.amount.toLocaleString()}</Typography.Text>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Card>
             ),
           },
           {
@@ -749,55 +323,6 @@ export default function ClientDetailPage() {
             ]} />
           </Form.Item>
           <Form.Item name="internalNotes" label="Internal Notes"><AntInput.TextArea rows={3} /></Form.Item>
-        </Form>
-      </Drawer>
-
-      <Drawer
-        title="Upload Document"
-        width={520}
-        open={docUploadOpen}
-        onClose={() => { setDocUploadOpen(false); setDocFileList([]); docForm.resetFields(); }}
-        footer={
-          <Space className="w-full justify-end">
-            <Button onClick={() => { setDocUploadOpen(false); setDocFileList([]); docForm.resetFields(); }}>Cancel</Button>
-            <Button type="primary" onClick={handleDocUpload}>Upload</Button>
-          </Space>
-        }
-        destroyOnClose
-      >
-        <Form form={docForm} layout="vertical">
-          <Form.Item name="name" label="Document Name" rules={[{ required: true, message: "Required" }]}>
-            <AntInput placeholder="e.g. Q1 Proposal" />
-          </Form.Item>
-          <Form.Item name="category" label="Category" initialValue="general">
-            <Select options={[
-              { value: "proposal", label: "Proposal" },
-              { value: "nda", label: "NDA" },
-              { value: "contract", label: "Contract" },
-              { value: "invoice", label: "Invoice" },
-              { value: "technical", label: "Technical" },
-              { value: "meeting_notes", label: "Meeting Notes" },
-              { value: "general", label: "General" },
-            ]} />
-          </Form.Item>
-          <Form.Item name="tags" label="Tags (comma-separated)">
-            <AntInput placeholder="e.g. React, Mobile App" />
-          </Form.Item>
-          <Form.Item label="File" required>
-            <Upload.Dragger
-              multiple={false}
-              fileList={docFileList}
-              onChange={({ fileList: fl }) => setDocFileList(fl.slice(-1))}
-              beforeUpload={() => false}
-              accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.svg,.zip"
-            >
-              <div className="flex flex-col items-center py-4">
-                <UploadIcon className="w-10 h-10 text-zinc-300 mb-3" />
-                <Typography.Text className="text-sm font-medium text-zinc-600">Drag & drop or click to browse</Typography.Text>
-                <Typography.Text className="text-xs text-zinc-400 mt-1">PDF, DOCX, XLSX, Images, ZIP</Typography.Text>
-              </div>
-            </Upload.Dragger>
-          </Form.Item>
         </Form>
       </Drawer>
 

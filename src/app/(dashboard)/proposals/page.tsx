@@ -330,20 +330,20 @@ export default function ProposalsPage() {
                     <FileText className="w-5 h-5 text-zinc-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Typography.Text className="text-sm font-semibold text-zinc-900 group-hover:text-blue-600 transition-colors">
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <Typography.Text className="text-sm font-semibold text-zinc-900 group-hover:text-blue-600 transition-colors truncate max-w-[200px]">
                         {proposal.name}
                       </Typography.Text>
                       <Tag
                         color={statusColors[proposal.status] || "default"}
-                        className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none shrink-0"
+                        className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none !h-[18px] !flex !items-center shrink-0"
                       >
                         {statusLabels[proposal.status] || proposal.status}
                       </Tag>
                       {proposal.isAiGenerated && !proposal.pricing && (
                         <Tag
                           color="processing"
-                          className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none"
+                          className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none !h-[18px] !flex !items-center shrink-0"
                         >
                           Generating
                         </Tag>

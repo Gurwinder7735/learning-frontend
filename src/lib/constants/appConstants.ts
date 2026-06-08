@@ -10,10 +10,8 @@ export const APP_ROUTES = {
   finance: "/finance",
   knowledge: "/knowledge",
   intelligence: "/intelligence",
-  projects: "/projects",
   users: "/users",
   settings: "/settings",
-  contracts: "/contracts",
 } as const;
 
 export const STORAGE_KEYS = {
