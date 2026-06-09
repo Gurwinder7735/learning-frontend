@@ -36,7 +36,7 @@ function Tr(props: React.ComponentPropsWithoutRef<"tr">) {
 
 function BlockQuote(props: React.ComponentPropsWithoutRef<"blockquote">) {
   return (
-    <blockquote className="border-l-4 border-indigo-400 bg-indigo-50/50 rounded-r-xl px-5 py-4 my-4 text-zinc-700 italic" {...props} />
+    <blockquote className="border-l-4 border-zinc-300 bg-zinc-50 rounded-r-xl px-5 py-4 my-4 text-zinc-700 italic" {...props} />
   );
 }
 

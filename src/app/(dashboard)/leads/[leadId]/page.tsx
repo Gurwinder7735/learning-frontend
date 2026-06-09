@@ -2,20 +2,25 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, List, App, Dropdown, Timeline, Input } from "antd";
-import { ArrowLeft, Target, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, Calendar, Clock, MoreHorizontal, MessageSquare, Flag, Save, User } from "lucide-react";
+import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, App, Timeline, DatePicker, Switch } from "antd";
+import { ArrowLeft, Target, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, Calendar, Clock, MessageSquare, Flag, Save, User, Video, Loader2 } from "lucide-react";
 import { COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import { useAuth } from "@/hooks/useAuth";
 import {
   fetchLeadDetailRequest, clearLeadDetail, updateLeadRequest, deleteLeadRequest,
-  updateLeadStatusRequest, addActivityRequest, createMeetingRequest, updateMeetingRequest,
-  deleteMeetingRequest, addActionItemRequest, updateActionItemRequest,
+  updateLeadStatusRequest, addActivityRequest,
 } from "@/store/modules/leads/leadsSlice";
 import { selectLeadDetail, selectLeadActivities, selectLeadMeetings } from "@/store/modules/leads/leadsSelectors";
 import { fetchUsersRequest } from "@/store/modules/user/userSlice";
 import { selectUsers } from "@/store/modules/user/userSelectors";
+import {
+  createMeetingRequest as createMeetingSystemRequest,
+  deleteMeetingRequest as deleteMeetingSystemRequest,
+  fetchGoogleStatusRequest,
+} from "@/store/modules/meetings/meetingsSlice";
+import { selectGoogleConnected } from "@/store/modules/meetings/meetingsSelectors";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
 
@@ -64,6 +69,7 @@ export default function LeadDetailPage() {
   const activities = useAppSelector(selectLeadActivities);
   const meetings = useAppSelector(selectLeadMeetings);
   const allUsers = useAppSelector(selectUsers);
+  const googleConnected = useAppSelector(selectGoogleConnected);
 
   const leadId = params.leadId as string;
   const lead = detail?.lead ?? null;
@@ -87,13 +93,12 @@ export default function LeadDetailPage() {
   const [salesPrepNotes, setSalesPrepNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
-  const [expandedMeeting, setExpandedMeeting] = useState<string | null>(null);
-  const [actionItemForm] = Form.useForm();
-  const [actionItemMeetingId, setActionItemMeetingId] = useState<string | null>(null);
+  const [meetingDeleting, setMeetingDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     if (leadId) {
       dispatch(fetchLeadDetailRequest(leadId));
+      dispatch(fetchGoogleStatusRequest());
     }
     return () => { dispatch(clearLeadDetail()); };
   }, [leadId, dispatch]);
@@ -162,31 +167,41 @@ export default function LeadDetailPage() {
   const handleCreateMeeting = async () => {
     try {
       const values = await meetingForm.validateFields();
-      dispatch(createMeetingRequest({ leadId, ...values }));
+      const meetingDate = values.meetingDate.toISOString();
+      dispatch(createMeetingSystemRequest({
+        title: values.title,
+        leadId,
+        meetingDate,
+        meetingType: values.meetingType || "discovery",
+        durationMinutes: values.durationMinutes || 60,
+        summary: values.summary || null,
+        attendees: values.attendees?.length ? values.attendees : (lead?.email ? [lead.email] : []),
+        location: values.location || null,
+        generateMeetLink: values.generateMeetLink || false,
+      }));
       setMeetingDrawerOpen(false);
       meetingForm.resetFields();
+      setTimeout(() => dispatch(fetchLeadDetailRequest(leadId)), 500);
     } catch {
       // validation failed
     }
   };
 
-  const handleAddActionItem = async () => {
-    if (!actionItemMeetingId) return;
-    try {
-      const values = await actionItemForm.validateFields();
-      dispatch(addActionItemRequest({ leadId, meetingId: actionItemMeetingId, ...values }));
-      setActionItemMeetingId(null);
-      actionItemForm.resetFields();
-    } catch {
-      // validation failed
-    }
-  };
-
-  const handleToggleActionItem = (meetingId: string, itemIndex: number, currentStatus: string) => {
-    dispatch(updateActionItemRequest({
-      leadId, meetingId, itemIndex,
-      data: { status: currentStatus === "completed" ? "pending" : "completed" },
-    }));
+  const handleDeleteMeeting = (meetingId: string) => {
+    Modal.confirm({
+      title: "Delete meeting",
+      content: "Are you sure?",
+      okText: "Delete",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setMeetingDeleting(meetingId);
+        dispatch(deleteMeetingSystemRequest(meetingId));
+        setTimeout(() => {
+          dispatch(fetchLeadDetailRequest(leadId));
+          setMeetingDeleting(null);
+        }, 500);
+      },
+    });
   };
 
   if (!lead) {
@@ -424,121 +439,61 @@ export default function LeadDetailPage() {
                     </Button>
                   </Empty>
                 ) : (
-                  <List
-                    dataSource={meetings}
-                    renderItem={(meeting) => (
-                      <List.Item className="!border-zinc-100 !py-4 !block">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
-                              <Calendar className="w-5 h-5 text-indigo-500" />
-                            </div>
-                            <div>
-                              <Typography.Text strong className="!text-zinc-900">{meeting.title}</Typography.Text>
-                              <div className="flex items-center gap-3 text-xs text-zinc-500 mt-0.5">
-                                <span className="inline-flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  {new Date(meeting.scheduledAt).toLocaleDateString()}
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {new Date(meeting.scheduledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                                {meeting.durationMinutes && (
-                                  <span>{meeting.durationMinutes} min</span>
-                                )}
-                                <Tag color={meeting.status === "completed" ? "green" : meeting.status === "cancelled" ? "red" : "blue"} className="!rounded-full !text-[10px] !px-2">
-                                  {meeting.status}
-                                </Tag>
-                              </div>
-                            </div>
-                          </div>
-                          <Dropdown menu={{
-                            items: [
-                              { key: "toggle", label: expandedMeeting === meeting.id ? "Collapse" : "Expand", onClick: () => setExpandedMeeting(expandedMeeting === meeting.id ? null : meeting.id) },
-                              { type: "divider" },
-                              { key: "delete", icon: <Trash2 className="w-4 h-4" />, label: "Delete", danger: true, onClick: () => {
-                                Modal.confirm({
-                                  title: "Delete meeting",
-                                  content: "Are you sure?",
-                                  okText: "Delete",
-                                  okButtonProps: { danger: true },
-                                  onOk: () => dispatch(deleteMeetingRequest({ leadId, meetingId: meeting.id })),
-                                });
-                              }},
-                            ],
-                          }}>
-                            <Button type="text" icon={<MoreHorizontal className="w-4 h-4" />} />
-                          </Dropdown>
+                  <div className="space-y-2">
+                    {meetings.map((meeting) => (
+                      <div
+                        key={meeting.id}
+                        className="group flex items-center gap-4 p-4 rounded-xl border border-zinc-200 hover:border-zinc-300 hover:shadow-sm transition-all cursor-pointer bg-white"
+                        onClick={() => router.push(`${APP_ROUTES.meetings}/${meeting.id}`)}
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-center shrink-0">
+                          <Calendar className="w-5 h-5 text-zinc-700" />
                         </div>
-
-                        {expandedMeeting === meeting.id && (
-                          <div className="ml-13 pl-2 mt-3 border-t border-zinc-100 pt-3">
-                            {meeting.meetingNotes && (
-                              <div className="mb-4">
-                                <Typography.Text className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Notes</Typography.Text>
-                                <p className="text-sm text-zinc-700 mt-1 whitespace-pre-wrap">{meeting.meetingNotes}</p>
-                              </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Typography.Text strong className="!text-sm block truncate">{meeting.title}</Typography.Text>
+                            {meeting.meetLink && (
+                              <Tag className="!rounded-full !text-[10px] !px-1.5 !py-0 !leading-none !border-purple-200 !text-purple-600 !bg-purple-50 shrink-0">
+                                <Video className="w-2.5 h-2.5 inline mr-0.5" />Meet
+                              </Tag>
                             )}
-
-                            <div className="mb-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <Typography.Text className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Action Items ({meeting.actionItems.length})</Typography.Text>
-                                <Button type="link" size="small" icon={<Plus className="w-3 h-3" />} onClick={() => { setActionItemMeetingId(meeting.id); }} className="!text-xs">
-                                  Add Item
-                                </Button>
-                              </div>
-
-                              {actionItemMeetingId === meeting.id && (
-                                <div className="mb-3 p-3 bg-zinc-50 rounded-lg border border-zinc-200">
-                                  <Form form={actionItemForm} layout="vertical" size="small">
-                                    <Form.Item name="description" label="Description" rules={[{ required: true, message: "Required" }]} className="!mb-2">
-                                      <AntInput placeholder="What needs to be done?" />
-                                    </Form.Item>
-                                    <Form.Item name="assignedTo" label="Assigned To" className="!mb-2">
-                                      <AntInput placeholder="Person responsible" />
-                                    </Form.Item>
-                                    <Space>
-                                      <Button type="primary" size="small" onClick={handleAddActionItem}>Add</Button>
-                                      <Button size="small" onClick={() => { setActionItemMeetingId(null); actionItemForm.resetFields(); }}>Cancel</Button>
-                                    </Space>
-                                  </Form>
-                                </div>
-                              )}
-
-                              {meeting.actionItems.length === 0 ? (
-                                <Typography.Text className="text-xs text-zinc-400 italic">No action items</Typography.Text>
-                              ) : (
-                                <div className="space-y-1">
-                                  {meeting.actionItems.map((item, idx) => (
-                                    <div key={idx} className="flex items-start gap-2 py-1">
-                                      <input
-                                        type="checkbox"
-                                        checked={item.status === "completed"}
-                                        onChange={() => handleToggleActionItem(meeting.id, idx, item.status)}
-                                        className="mt-1 w-3.5 h-3.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                      />
-                                      <div className="flex-1 min-w-0">
-                                        <span className={`text-sm ${item.status === "completed" ? "line-through text-zinc-400" : "text-zinc-900"}`}>
-                                          {item.description}
-                                        </span>
-                                        {item.assignedTo && (
-                                          <span className="text-xs text-zinc-400 ml-2">&mdash; {item.assignedTo}</span>
-                                        )}
-                                        {item.dueDate && (
-                                          <span className="text-xs text-zinc-400 ml-2">due {new Date(item.dueDate).toLocaleDateString()}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
                           </div>
-                        )}
-                      </List.Item>
-                    )}
-                  />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Tag color={meeting.status === "completed" ? "green" : meeting.status === "cancelled" ? "red" : "blue"} className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none">
+                              {meeting.status.replace("_", " ")}
+                            </Tag>
+                            <Typography.Text className="text-xs text-zinc-400">
+                              {new Date(meeting.meetingDate).toLocaleDateString("en-US", {
+                                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                              })}
+                            </Typography.Text>
+                            {meeting.durationMinutes && (
+                              <Typography.Text className="text-xs text-zinc-400">&middot; {meeting.durationMinutes} min</Typography.Text>
+                            )}
+                            {meeting.attendees && meeting.attendees.length > 0 && (
+                              <Typography.Text className="text-xs text-zinc-400">&middot; {meeting.attendees.length} {meeting.attendees.length === 1 ? "attendee" : "attendees"}</Typography.Text>
+                            )}
+                          </div>
+                        </div>
+                        <Space size={4} onClick={(e) => e.stopPropagation()} className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {meeting.meetLink && (
+                            <a href={meeting.meetLink} target="_blank" rel="noopener noreferrer">
+                              <Button size="small" icon={<Video className="w-3 h-3" />} className="!text-zinc-800 !border-zinc-300 !text-xs">
+                                Join
+                              </Button>
+                            </a>
+                          )}
+                          <Button
+                            size="small"
+                            danger
+                            type="text"
+                            icon={meetingDeleting === meeting.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            onClick={() => handleDeleteMeeting(meeting.id)}
+                          />
+                        </Space>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </Card>
             ),
@@ -594,7 +549,7 @@ export default function LeadDetailPage() {
 
       <Drawer
         title="Schedule Meeting"
-        width={560}
+        width={520}
         open={meetingDrawerOpen}
         onClose={() => { setMeetingDrawerOpen(false); meetingForm.resetFields(); }}
         footer={
@@ -605,16 +560,44 @@ export default function LeadDetailPage() {
         }
         destroyOnClose
       >
-        <Form form={meetingForm} layout="vertical">
-          <Form.Item name="title" label="Meeting Title" rules={[{ required: true, message: "Required" }]}>
-            <AntInput placeholder="e.g. Discovery Call" />
+        <Form form={meetingForm} layout="vertical" initialValues={{
+          title: lead?.contactPerson ? `Discovery Call with ${lead.contactPerson}` : "",
+          meetingType: "discovery",
+          durationMinutes: 60,
+        }}>
+          <Form.Item name="title" label="Title" rules={[{ required: true, message: "Required" }]}>
+            <AntInput placeholder="Meeting title" />
           </Form.Item>
-          <Form.Item name="scheduledAt" label="Date & Time" rules={[{ required: true, message: "Required" }]}>
-            <AntInput type="datetime-local" />
+          <Form.Item name="meetingType" label="Type">
+            <Select options={[
+              { value: "client_meeting", label: "Client Meeting" },
+              { value: "internal", label: "Internal" },
+              { value: "discovery", label: "Discovery" },
+              { value: "review", label: "Review" },
+              { value: "kickoff", label: "Kickoff" },
+              { value: "other", label: "Other" },
+            ]} />
+          </Form.Item>
+          <Form.Item name="meetingDate" label="Date & Time" rules={[{ required: true, message: "Required" }]}>
+            <DatePicker showTime className="w-full" />
           </Form.Item>
           <Form.Item name="durationMinutes" label="Duration (minutes)">
-            <AntInput type="number" placeholder="e.g. 60" />
+            <AntInput type="number" min={15} max={480} placeholder="60" />
           </Form.Item>
+          <Form.Item name="summary" label="Summary">
+            <AntInput.TextArea rows={3} placeholder="Meeting agenda or notes" />
+          </Form.Item>
+          <Form.Item name="attendees" label="Attendees">
+            <Select mode="tags" placeholder="Type email and press Enter" tokenSeparators={[",", ";", " "]} open={false} />
+          </Form.Item>
+          <Form.Item name="location" label="Location">
+            <AntInput placeholder="Room or virtual link" />
+          </Form.Item>
+          {googleConnected && (
+            <Form.Item name="generateMeetLink" label="Generate Google Meet Link" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          )}
         </Form>
       </Drawer>
     </div>

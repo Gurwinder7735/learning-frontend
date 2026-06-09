@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Tag, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, Drawer, message, Divider } from "antd";
-import { ArrowLeft, FileText, Edit3, Save, Trash2, Copy, Loader2, CheckCircle, XCircle, Sparkles, PenLine, Send, ShieldCheck, Download } from "lucide-react";
+import { Button, Tag, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, Drawer, message } from "antd";
+import { ArrowLeft, FileText, Edit3, Save, Trash2, Copy, Loader2, CheckCircle, XCircle, PenLine, Send, ShieldCheck, Download } from "lucide-react";
 import { MarkdownRenderer } from "@/components/features/ProposalIntelligence/MarkdownRenderer";
 import { AgentExecutionPanel } from "@/components/features/ProposalIntelligence/AgentExecutionPanel";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -19,7 +19,6 @@ import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { selectClients } from "@/store/modules/clients/clientsSelectors";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
 import { storage } from "@/lib/utils/storage";
-import type { ContractJob as ContractJobType } from "@/types/models/Contract";
 import type { SignatureStatus } from "@/types/models/Proposal";
 
 const statusColors: Record<string, string> = {
@@ -83,11 +82,6 @@ export default function ProposalDetailPage() {
   const [liveStream, setLiveStream] = useState<Record<string, string>>({});
   const abortRef = useRef<AbortController | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [contractDrawerOpen, setContractDrawerOpen] = useState(false);
-  const [contractGenLoading, setContractGenLoading] = useState(false);
-  const [contractJob, setContractJob] = useState<ContractJobType | null>(null);
-  const contractPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus | null>(null);
   const [signSending, setSignSending] = useState(false);
@@ -303,58 +297,6 @@ export default function ProposalDetailPage() {
     }
   };
 
-  const handleGenerateContracts = async () => {
-    setContractDrawerOpen(true);
-    setContractGenLoading(true);
-    setContractJob(null);
-    try {
-      const token = storage.getAccessToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const res = await fetch(`${API_BASE_URL}/api/v1/contracts/generate`, {
-        method: "POST", headers, body: JSON.stringify({ proposalId }),
-      });
-      if (!res.ok) throw new Error("Failed to start contract generation");
-      const json = await res.json();
-      const jobId = json.data?.jobId;
-      if (jobId) pollContractJob();
-    } catch {
-      message.error("Failed to start contract generation");
-      setContractGenLoading(false);
-    }
-  };
-
-  const pollContractJob = async () => {
-    try {
-      const token = storage.getAccessToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const res = await fetch(`${API_BASE_URL}/api/v1/contracts/jobs/by-proposal/${proposalId}`, { headers });
-      if (!res.ok) { setContractGenLoading(false); return; }
-      const json = await res.json();
-      const job = json.data as ContractJobType;
-      setContractJob(job);
-
-      if (job.status === "running" || job.status === "pending") {
-        contractPollTimerRef.current = setTimeout(pollContractJob, 3000);
-      } else {
-        setContractGenLoading(false);
-        if (job.status === "completed") message.success("Contracts generated successfully");
-        else message.error("Contract generation failed");
-      }
-    } catch {
-      setContractGenLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (contractPollTimerRef.current) clearTimeout(contractPollTimerRef.current);
-    };
-  }, []);
-
   if (!proposal) {
     return <div className="flex justify-center items-center py-32"><Spin size="large" /></div>;
   }
@@ -455,9 +397,6 @@ export default function ProposalDetailPage() {
                 { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" },
                 { value: "archived", label: "Archived" },
               ]} />
-            <Button icon={<Sparkles className="w-4 h-4" />} onClick={handleGenerateContracts} className="!bg-indigo-600 !text-white hover:!bg-indigo-700 !border-indigo-600">
-              Generate Contracts
-            </Button>
             {proposal.shareToken && (
               <Button icon={<Copy className="w-4 h-4" />} onClick={copyShareLink}>Copy Share Link</Button>
             )}
@@ -525,7 +464,7 @@ export default function ProposalDetailPage() {
       {proposal.isAiGenerated && jobStatus === "running" ? (
         <div className="max-w-2xl mx-auto py-8">
           <div className="flex items-center gap-3 mb-6">
-            <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+            <Loader2 className="w-5 h-5 text-zinc-800 animate-spin" />
             <Typography.Text className="text-lg font-medium text-zinc-700">Generating proposal...</Typography.Text>
           </div>
           <AgentExecutionPanel agents={liveAgents} currentStream={liveStream} />
@@ -533,7 +472,7 @@ export default function ProposalDetailPage() {
       ) : proposal.isAiGenerated && jobStatus === "pending" ? (
         <div className="flex justify-center items-center py-32">
           <div className="text-center">
-            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-4" />
+            <Loader2 className="w-8 h-8 text-zinc-800 animate-spin mx-auto mb-4" />
             <Typography.Text className="text-zinc-500">Starting generation...</Typography.Text>
           </div>
         </div>
@@ -542,52 +481,6 @@ export default function ProposalDetailPage() {
       ) : (
         <Tabs defaultActiveKey={defaultTab} items={tabItems} />
       )}
-
-      <Drawer title="Generate Contracts" width={520} open={contractDrawerOpen}
-        onClose={() => { if (!contractGenLoading) { setContractDrawerOpen(false); setContractJob(null); } }} destroyOnClose>
-        <div className="space-y-5">
-          {contractJob && (contractJob.status === "running" || contractJob.status === "pending") ? (
-            <div>
-              <div className="flex items-center gap-3 mb-6">
-                <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
-                <Typography.Text className="font-medium text-zinc-700">Generating contracts...</Typography.Text>
-              </div>
-              <AgentExecutionPanel
-                agents={[
-                  { agentName: "nda_agent", displayName: "NDA Agent", status: "pending" as const },
-                  { agentName: "msa_agent", displayName: "MSA Agent", status: "pending" as const },
-                  { agentName: "sow_agent", displayName: "SOW Agent", status: "pending" as const },
-                ].map((a) => {
-                  const run = contractJob.agentRuns.find((r) => r.agentName === a.agentName);
-                  return run ? { ...a, status: run.status as "pending" | "running" | "completed" | "failed" } : a;
-                })}
-                currentStream={{}}
-              />
-            </div>
-          ) : contractJob && contractJob.status === "completed" ? (
-            <div className="text-center py-8">
-              <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-              <Typography.Title level={4} className="!text-green-700">Contracts Generated</Typography.Title>
-              <Typography.Text className="text-zinc-500">NDA, MSA, and SOW have been created. View them in the Contracts section.</Typography.Text>
-              <div className="mt-4">
-                <Button type="primary" onClick={() => router.push(APP_ROUTES.contracts)}>View Contracts</Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Sparkles className="w-12 h-12 text-indigo-500 mx-auto mb-3" />
-              <Typography.Title level={4} className="!text-zinc-800">Ready to Generate</Typography.Title>
-              <Typography.Text className="text-zinc-500 block mb-6">
-                This will generate three documents based on this proposal: NDA, MSA, and Statement of Work.
-              </Typography.Text>
-              <Button type="primary" icon={contractGenLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                onClick={handleGenerateContracts} disabled={contractGenLoading} className="!bg-indigo-600">
-                {contractGenLoading ? "Starting..." : "Generate Contracts"}
-              </Button>
-            </div>
-          )}
-        </div>
-      </Drawer>
 
       <Drawer title="Edit Proposal" width={480} open={editDrawerOpen} onClose={() => setEditDrawerOpen(false)}
         footer={<Space className="w-full justify-end"><Button onClick={() => setEditDrawerOpen(false)}>Cancel</Button><Button type="primary" onClick={handleUpdate}>Save Changes</Button></Space>}

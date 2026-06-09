@@ -2,27 +2,19 @@
 
 import { PropsWithChildren } from "react";
 import { Provider } from "react-redux";
-import { App, ConfigProvider, theme } from "antd";
+import { App, ConfigProvider } from "antd";
 import { store } from "@/store";
-import { AntdRegistry } from '@ant-design/nextjs-registry';
+import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { HydrateAuth } from "@/components/common/HydrateAuth";
-
+import { antTheme } from "@/lib/theme";
 
 export default function Providers({ children }: PropsWithChildren) {
   return (
     <Provider store={store}>
       <HydrateAuth>
-        <ConfigProvider
-          theme={{
-            algorithm: theme.defaultAlgorithm,
-            token: {
-              colorPrimary: "#1677ff",
-              borderRadius: 8,
-            },
-          }}
-        >
+        <ConfigProvider theme={antTheme}>
           <AntdRegistry>
-          <App>{children}</App>
+            <App>{children}</App>
           </AntdRegistry>
         </ConfigProvider>
       </HydrateAuth>

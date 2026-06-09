@@ -38,7 +38,7 @@ export function AgentExecutionPanel({ agents, currentStream }: Props) {
             key={agent.agentName}
             className={`rounded-xl border p-4 transition-all ${
               agent.status === "running"
-                ? "border-indigo-200 bg-indigo-50/50 shadow-sm"
+                ? "border-zinc-200 bg-zinc-50 shadow-sm"
                 : agent.status === "completed"
                   ? "border-emerald-200 bg-emerald-50/30"
                   : agent.status === "failed"
@@ -65,7 +65,7 @@ export function AgentExecutionPanel({ agents, currentStream }: Props) {
                   <span className="text-xs text-zinc-400 bg-zinc-100 rounded-full px-3 py-1">Waiting...</span>
                 )}
                 {agent.status === "running" && (
-                  <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+                  <Loader2 className="w-5 h-5 text-zinc-800 animate-spin" />
                 )}
                 {agent.status === "completed" && (
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />

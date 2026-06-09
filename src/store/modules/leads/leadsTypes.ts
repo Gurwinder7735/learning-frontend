@@ -1,4 +1,5 @@
-import type { Lead, LeadActivity, LeadMeeting, LeadDetail, LeadStats } from "@/types/models/Lead";
+import type { Lead, LeadActivity, LeadDetail, LeadStats } from "@/types/models/Lead";
+import type { Meeting } from "@/types/models/Meeting";
 
 export interface LeadsState {
   items: Lead[];
@@ -8,7 +9,7 @@ export interface LeadsState {
   stats: LeadStats | null;
   detail: LeadDetail | null;
   activities: LeadActivity[];
-  meetings: LeadMeeting[];
+  meetings: Meeting[];
 }
 
 export interface LeadsQuery {

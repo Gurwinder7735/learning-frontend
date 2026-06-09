@@ -43,14 +43,7 @@ export function LoginForm({ isLoading, onSubmit }: LoginFormProps) {
       </Form.Item>
 
       <Form.Item
-        label={
-          <div className="flex justify-between w-full items-center">
-            <span className="font-semibold text-zinc-950 text-sm">Password</span>
-            <a href="#" className="text-sm font-medium text-zinc-500 hover:text-zinc-950 transition-colors">
-              Forgot password?
-            </a>
-          </div>
-        }
+        label={<span className="font-semibold text-zinc-950 text-sm">Password</span>}
         validateStatus={errors.password ? "error" : ""}
         help={errors.password?.message}
         className="mb-8"

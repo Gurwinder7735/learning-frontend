@@ -285,7 +285,7 @@ export default function ProposalsPage() {
           type="primary"
           icon={<Sparkles className="w-4 h-4" />}
           onClick={() => setGenOpen(true)}
-          className="!bg-indigo-600"
+          className="!bg-black"
         >
           Generate Proposal
         </Button>
@@ -308,7 +308,7 @@ export default function ProposalsPage() {
             type="primary"
             icon={<Sparkles className="w-4 h-4" />}
             onClick={() => setGenOpen(true)}
-            className="!bg-indigo-600"
+            className="!bg-black"
           >
             Generate Proposal
           </Button>
@@ -569,7 +569,7 @@ export default function ProposalsPage() {
               }
               onClick={handleGenerate}
               disabled={!genInputText.trim() || genLoading}
-              className="!bg-indigo-600"
+              className="!bg-black"
             >
               {genLoading ? "Starting..." : "Generate"}
             </Button>

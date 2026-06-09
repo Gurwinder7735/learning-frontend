@@ -1,3 +1,5 @@
+import type { Meeting } from "./Meeting";
+
 export interface ActionItem {
   description: string;
   assignedTo?: string | null;
@@ -52,7 +54,7 @@ export interface LeadMeeting {
 export interface LeadDetail {
   lead: Lead;
   activities: LeadActivity[];
-  meetings: LeadMeeting[];
+  meetings: Meeting[];
 }
 
 export interface LeadStats {

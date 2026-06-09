@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import type { Lead, LeadDetail, LeadActivity, LeadMeeting, LeadStats } from "@/types/models/Lead";
+import type { Lead, LeadDetail, LeadActivity, LeadStats } from "@/types/models/Lead";
+import type { Meeting } from "@/types/models/Meeting";
 import type { LeadsState, LeadsQuery, LeadCreatePayload, LeadUpdatePayload, LeadActivityCreatePayload, LeadMeetingCreatePayload, LeadMeetingUpdatePayload, ActionItemCreatePayload, ActionItemUpdatePayload } from "./leadsTypes";
 
 const initialState: LeadsState = {
@@ -79,13 +80,13 @@ const leadsSlice = createSlice({
     },
     addActivityFailure: (_state, _action: PayloadAction<string>) => {},
     createMeetingRequest: (_state, _action: PayloadAction<LeadMeetingCreatePayload>) => {},
-    createMeetingSuccess: (state, action: PayloadAction<LeadMeeting>) => {
+    createMeetingSuccess: (state, action: PayloadAction<Meeting>) => {
       state.meetings.unshift(action.payload);
       if (state.detail) state.detail.meetings.unshift(action.payload);
     },
     createMeetingFailure: (_state, _action: PayloadAction<string>) => {},
     updateMeetingRequest: (_state, _action: PayloadAction<LeadMeetingUpdatePayload>) => {},
-    updateMeetingSuccess: (state, action: PayloadAction<LeadMeeting>) => {
+    updateMeetingSuccess: (state, action: PayloadAction<Meeting>) => {
       const idx = state.meetings.findIndex((m) => m.id === action.payload.id);
       if (idx !== -1) state.meetings[idx] = action.payload;
     },
@@ -96,13 +97,13 @@ const leadsSlice = createSlice({
     },
     deleteMeetingFailure: (_state, _action: PayloadAction<string>) => {},
     addActionItemRequest: (_state, _action: PayloadAction<ActionItemCreatePayload>) => {},
-    addActionItemSuccess: (state, action: PayloadAction<LeadMeeting>) => {
+    addActionItemSuccess: (state, action: PayloadAction<Meeting>) => {
       const idx = state.meetings.findIndex((m) => m.id === action.payload.id);
       if (idx !== -1) state.meetings[idx] = action.payload;
     },
     addActionItemFailure: (_state, _action: PayloadAction<string>) => {},
     updateActionItemRequest: (_state, _action: PayloadAction<ActionItemUpdatePayload>) => {},
-    updateActionItemSuccess: (state, action: PayloadAction<LeadMeeting>) => {
+    updateActionItemSuccess: (state, action: PayloadAction<Meeting>) => {
       const idx = state.meetings.findIndex((m) => m.id === action.payload.id);
       if (idx !== -1) state.meetings[idx] = action.payload;
     },

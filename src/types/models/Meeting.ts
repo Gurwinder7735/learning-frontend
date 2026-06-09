@@ -1,13 +1,21 @@
 export interface Meeting {
   id: string;
   title: string;
+  leadId?: string | null;
   clientId?: string | null;
   clientName?: string | null;
   projectId?: string | null;
   meetingType: string;
+  status: string;
   summary?: string | null;
   notes?: string | null;
   meetingDate: string;
+  durationMinutes?: number | null;
+  attendees: string[];
+  location?: string | null;
+  googleEventId?: string | null;
+  googleCalendarId?: string | null;
+  meetLink?: string | null;
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;

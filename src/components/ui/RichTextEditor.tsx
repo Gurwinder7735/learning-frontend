@@ -10,6 +10,7 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   editable?: boolean;
+  minHeight?: number;
 }
 
 function ToolbarButton({
@@ -41,6 +42,7 @@ export default function RichTextEditor({
   onChange,
   placeholder = "Write your notes here...",
   editable = true,
+  minHeight = 200,
 }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -57,7 +59,7 @@ export default function RichTextEditor({
   if (!editor) {
     return (
       <div className="border border-zinc-200 rounded-xl overflow-hidden bg-white">
-        <div className="p-4 min-h-[200px] flex items-center justify-center">
+        <div className="p-4 flex items-center justify-center" style={{ minHeight }}>
           <div className="w-6 h-6 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
         </div>
       </div>
@@ -115,12 +117,14 @@ export default function RichTextEditor({
           </ToolbarButton>
         </div>
       )}
-      <EditorContent
-        editor={editor}
-        className={`prose prose-zinc prose-sm max-w-none p-4 ${
-          !editable ? "cursor-default" : ""
-        } [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[200px] [&_.ProseMirror]:leading-snug [&_.ProseMirror_p]:my-1 [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-zinc-300 [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0`}
-      />
+        <div style={{ minHeight }}>
+        <EditorContent
+          editor={editor}
+          className={`prose prose-zinc prose-sm max-w-none p-4 ${
+            !editable ? "cursor-default" : ""
+          } [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-full [&_.ProseMirror]:leading-snug [&_.ProseMirror_p]:my-1 [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-zinc-300 [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0`}
+        />
+      </div>
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { notification } from "antd";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { apiRequest } from "@/lib/api/axiosInstance";
 import type { ApiResponse } from "@/types/api.types";
-import type { Lead, LeadDetail, LeadActivity, LeadMeeting, LeadStats } from "@/types/models/Lead";
+import type { Lead, LeadDetail, LeadActivity, LeadStats } from "@/types/models/Lead";
+import type { Meeting } from "@/types/models/Meeting";
 import {
   fetchLeadsRequest, fetchLeadsSuccess, fetchLeadsFailure,
   createLeadRequest, createLeadSuccess, createLeadFailure,
@@ -130,7 +131,7 @@ function* addActivityWorker(action: { type: string; payload: LeadActivityCreateP
 
 function* createMeetingWorker(action: { type: string; payload: LeadMeetingCreatePayload }) {
   try {
-    const response: ApiResponse<LeadMeeting> = yield call(apiRequest, {
+    const response: ApiResponse<Meeting> = yield call(apiRequest, {
       url: API_ENDPOINTS.leads.meetings(action.payload.leadId),
       method: "POST",
       data: { title: action.payload.title, scheduledAt: action.payload.scheduledAt, durationMinutes: action.payload.durationMinutes },
@@ -146,7 +147,7 @@ function* createMeetingWorker(action: { type: string; payload: LeadMeetingCreate
 
 function* updateMeetingWorker(action: { type: string; payload: LeadMeetingUpdatePayload }) {
   try {
-    const response: ApiResponse<LeadMeeting> = yield call(apiRequest, {
+    const response: ApiResponse<Meeting> = yield call(apiRequest, {
       url: API_ENDPOINTS.leads.updateMeeting(action.payload.leadId, action.payload.meetingId),
       method: "PUT",
       data: action.payload.data,
@@ -177,7 +178,7 @@ function* deleteMeetingWorker(action: { type: string; payload: { leadId: string;
 
 function* addActionItemWorker(action: { type: string; payload: ActionItemCreatePayload }) {
   try {
-    const response: ApiResponse<LeadMeeting> = yield call(apiRequest, {
+    const response: ApiResponse<Meeting> = yield call(apiRequest, {
       url: API_ENDPOINTS.leads.actionItems(action.payload.leadId, action.payload.meetingId),
       method: "POST",
       data: { description: action.payload.description, assignedTo: action.payload.assignedTo, dueDate: action.payload.dueDate },
@@ -193,7 +194,7 @@ function* addActionItemWorker(action: { type: string; payload: ActionItemCreateP
 
 function* updateActionItemWorker(action: { type: string; payload: ActionItemUpdatePayload }) {
   try {
-    const response: ApiResponse<LeadMeeting> = yield call(apiRequest, {
+    const response: ApiResponse<Meeting> = yield call(apiRequest, {
       url: API_ENDPOINTS.leads.updateActionItem(action.payload.leadId, action.payload.meetingId, action.payload.itemIndex),
       method: "PUT",
       data: action.payload.data,

@@ -184,7 +184,7 @@ export default function LeadsPage() {
           </Col>
           <Col xs={12} sm={4}>
             <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic title="Contacted" value={stats.contactedCount} prefix={<PhoneCall className="w-4 h-4 text-indigo-500 mr-1" />} valueStyle={{ fontSize: 20 }} />
+              <Statistic title="Contacted" value={stats.contactedCount} prefix={<PhoneCall className="w-4 h-4 text-zinc-700 mr-1" />} valueStyle={{ fontSize: 20 }} />
             </Card>
           </Col>
           <Col xs={12} sm={4}>
