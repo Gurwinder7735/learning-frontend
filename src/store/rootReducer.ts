@@ -7,6 +7,7 @@ import leadsReducer from "@/store/modules/leads/leadsSlice";
 import rolesReducer from "@/store/modules/roles/rolesSlice";
 import meetingsReducer from "@/store/modules/meetings/meetingsSlice";
 import proposalIntelligenceReducer from "@/store/modules/proposalIntelligence/proposalIntelligenceSlice";
+import documentsReducer from "@/store/modules/documents/documentsSlice";
 
 const rootReducer = combineReducers({
   auth: authReducer,
@@ -17,6 +18,7 @@ const rootReducer = combineReducers({
   roles: rolesReducer,
   meetings: meetingsReducer,
   proposalIntelligence: proposalIntelligenceReducer,
+  documents: documentsReducer,
 });
 
 export default rootReducer;

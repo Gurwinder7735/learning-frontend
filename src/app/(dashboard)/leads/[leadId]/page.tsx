@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, App, Timeline, DatePicker, Switch } from "antd";
+import DocumentList from "@/components/documents/DocumentList";
 import { ArrowLeft, Target, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, Calendar, Clock, MessageSquare, Flag, Save, User, Video, Loader2 } from "lucide-react";
 import { COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -417,6 +418,15 @@ export default function LeadDetailPage() {
                   onChange={setSalesPrepNotes}
                   placeholder="Prepare your sales notes here — talking points, key info, objection handling, etc..."
                 />
+              </Card>
+            ),
+          },
+          {
+            key: "documents",
+            label: "Documents",
+            children: (
+              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={<span>Documents</span>}>
+                <DocumentList entityType="lead" entityId={leadId} />
               </Card>
             ),
           },
