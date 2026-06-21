@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, App, Timeline, DatePicker, Switch } from "antd";
 import DocumentList from "@/components/documents/DocumentList";
-import { ArrowLeft, Target, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, Calendar, Clock, MessageSquare, Flag, Save, User, Video, Loader2 } from "lucide-react";
+import { ArrowLeft, Target, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, Calendar, Clock, MessageSquare, Flag, Save, User, Video, Loader2, FileText } from "lucide-react";
 import { COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
@@ -58,6 +58,7 @@ const activityTypeIcons: Record<string, React.ReactNode> = {
   note: <MessageSquare className="w-4 h-4" />,
   status_change: <Flag className="w-4 h-4" />,
   meeting: <Calendar className="w-4 h-4" />,
+  document_uploaded: <FileText className="w-4 h-4" />,
 };
 
 export default function LeadDetailPage() {

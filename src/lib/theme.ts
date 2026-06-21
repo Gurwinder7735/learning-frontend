@@ -86,6 +86,7 @@ export const antTheme = {
       borderRadius: 8,
       borderRadiusLG: 10,
       controlHeight: 36,
+      optionSelectedColor: "#ffffff",
     },
     Input: {
       borderRadius: 8,

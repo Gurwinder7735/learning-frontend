@@ -61,8 +61,9 @@ export default function DocumentPreview({ doc, open, onClose }: DocumentPreviewP
       open={open}
       onCancel={onClose}
       footer={null}
-      width={800}
+      width="90vw"
       destroyOnClose
+      centered
     >
       {loading ? (
         <div className="flex justify-center py-20">
@@ -78,14 +79,14 @@ export default function DocumentPreview({ doc, open, onClose }: DocumentPreviewP
             src={blobUrl}
             alt={doc.originalFilename}
             className="max-w-full rounded-lg"
-            style={{ maxHeight: "70vh", objectFit: "contain" }}
+            style={{ maxHeight: "85vh", objectFit: "contain" }}
           />
         </div>
       ) : doc?.mimeType === "application/pdf" ? (
         <iframe
           src={blobUrl}
           className="w-full rounded-lg border border-zinc-200"
-          style={{ height: "70vh" }}
+          style={{ height: "85vh" }}
           title={doc?.originalFilename}
         />
       ) : (
