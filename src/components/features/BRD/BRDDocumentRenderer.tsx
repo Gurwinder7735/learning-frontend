@@ -194,14 +194,19 @@ const components: Components = {
 
 // ─── Table of Contents ────────────────────────────────────────────────────────
 
-function TableOfContents({ headings, activeId }: { headings: Heading[]; activeId: string }) {
+function TableOfContents({
+  headings,
+  activeId,
+  onItemClick,
+}: {
+  headings: Heading[];
+  activeId: string;
+  onItemClick: (id: string) => void;
+}) {
   if (headings.length === 0) return null;
 
   return (
-    <nav
-      aria-label="Table of contents"
-      className="max-h-[calc(100vh-6rem)] overflow-y-auto"
-    >
+    <nav aria-label="Table of contents">
       <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400 mb-3 px-2">
         Contents
       </p>
@@ -211,7 +216,7 @@ function TableOfContents({ headings, activeId }: { headings: Heading[]; activeId
           return (
             <li key={h.id}>
               <button
-                onClick={() => scrollToId(h.id)}
+                onClick={() => onItemClick(h.id)}
                 className={`w-full text-left text-xs leading-snug rounded-lg px-2 py-1.5 transition-all cursor-pointer ${
                   h.level === 3 ? "pl-5" : ""
                 } ${
@@ -239,28 +244,40 @@ interface Props {
 export function BRDDocumentRenderer({ content }: Props) {
   const headings = extractHeadings(content);
   const [activeId, setActiveId] = useState(headings[0]?.id ?? "");
+  // While this ref is true the observer will not update activeId —
+  // prevents intermediate sections from flashing active during a
+  // click-triggered scroll animation.
+  const scrollingRef = React.useRef(false);
+  const scrollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Track which section is in view
+  const handleTocClick = (id: string) => {
+    // Immediately mark the clicked item active and suppress the observer.
+    setActiveId(id);
+    scrollingRef.current = true;
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    // Re-enable the observer ~700 ms after the scroll starts — enough time
+    // for the smooth-scroll animation to finish on most documents.
+    scrollTimerRef.current = setTimeout(() => {
+      scrollingRef.current = false;
+    }, 700);
+    scrollToId(id);
+  };
+
+  // Track which section is in view (only when the user is scrolling manually).
   useEffect(() => {
     if (headings.length === 0) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        // Find the topmost intersecting heading
+        if (scrollingRef.current) return; // ignore during click-scroll
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible.length > 0) {
-          setActiveId(visible[0].target.id);
-        }
+        if (visible.length > 0) setActiveId(visible[0].target.id);
       },
-      {
-        rootMargin: "-60px 0px -50% 0px",
-        threshold: 0,
-      }
+      { rootMargin: "-60px 0px -50% 0px", threshold: 0 }
     );
 
-    // Small delay to ensure headings are in the DOM
     const timer = setTimeout(() => {
       headings.forEach(({ id }) => {
         const el = document.getElementById(id);
@@ -271,6 +288,7 @@ export function BRDDocumentRenderer({ content }: Props) {
     return () => {
       clearTimeout(timer);
       observer.disconnect();
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     };
   }, [content]); // eslint-disable-line
 
@@ -278,7 +296,7 @@ export function BRDDocumentRenderer({ content }: Props) {
     <div className="flex gap-10 items-start">
       {/* Sidebar TOC — visible on lg+. sticky must be on the flex child itself. */}
       <aside className="hidden lg:block w-52 shrink-0 sticky top-20 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto">
-        <TableOfContents headings={headings} activeId={activeId} />
+        <TableOfContents headings={headings} activeId={activeId} onItemClick={handleTocClick} />
       </aside>
 
       {/* Document body */}
