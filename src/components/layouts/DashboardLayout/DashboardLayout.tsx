@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Target,
   ShieldCheck,
+  BookText,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -51,6 +52,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     ...(can("proposals", "view")
       ? [{ name: "Proposals", href: APP_ROUTES.proposals, icon: FileCheck }]
       : []),
+    { name: "BRD Studio", href: APP_ROUTES.brd, icon: BookText },
     ...(isAdmin ? [{ name: "Users", href: APP_ROUTES.users, icon: Users }] : []),
     ...(isAdmin ? [{ name: "Roles", href: "/roles", icon: ShieldCheck }] : []),
   ];

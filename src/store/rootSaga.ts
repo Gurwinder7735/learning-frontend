@@ -8,7 +8,8 @@ import { rolesSaga } from "@/store/modules/roles/rolesSaga";
 import { meetingsSaga } from "@/store/modules/meetings/meetingsSaga";
 import { proposalIntelligenceSaga } from "@/store/modules/proposalIntelligence/proposalIntelligenceSaga";
 import { documentsSaga } from "@/store/modules/documents/documentsSaga";
+import { brdSaga } from "@/store/modules/brd/brdSaga";
 
 export default function* rootSaga() {
-  yield all([fork(authSaga), fork(userSaga), fork(clientsSaga), fork(proposalsSaga), fork(leadsSaga), fork(rolesSaga), fork(meetingsSaga), fork(proposalIntelligenceSaga), fork(documentsSaga)]);
+  yield all([fork(authSaga), fork(userSaga), fork(clientsSaga), fork(proposalsSaga), fork(leadsSaga), fork(rolesSaga), fork(meetingsSaga), fork(proposalIntelligenceSaga), fork(documentsSaga), fork(brdSaga)]);
 }

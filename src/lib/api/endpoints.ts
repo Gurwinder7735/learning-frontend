@@ -90,6 +90,15 @@ export const API_ENDPOINTS = {
     update: (id: string) => `/api/v1/roles/${id}`,
     delete: (id: string) => `/api/v1/roles/${id}`,
   },
+  brd: {
+    generate: "/api/v1/brd/generate",
+    list: "/api/v1/brd/brds",
+    detail: (id: string) => `/api/v1/brd/brds/${id}`,
+    share: (token: string) => `/api/v1/brd/brds/share/${token}`,
+    jobs: "/api/v1/brd/jobs",
+    jobDetail: (id: string) => `/api/v1/brd/jobs/${id}`,
+    stream: (jobId: string) => `/api/v1/brd/jobs/${jobId}/stream`,
+  },
   proposalIntelligence: {
     jobs: "/api/v1/proposal-intelligence/jobs",
     jobDetail: (id: string) => `/api/v1/proposal-intelligence/jobs/${id}`,
