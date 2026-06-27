@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Input, Select, Typography, Spin, message, Slider } from "antd";
-import { Save, Calendar, CheckCircle, XCircle, DollarSign, Zap, PlugZap } from "lucide-react";
+import { Button, Input, Select, Typography, Spin, message, Slider, Upload } from "antd";
+import { Save, Calendar, CheckCircle, XCircle, DollarSign, Zap, PlugZap, Palette, UploadCloud, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { storage } from "@/lib/utils/storage";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
@@ -24,10 +24,17 @@ interface Settings {
   teamSize: number;
 }
 
+interface Branding {
+  companyName: string;
+  tagline: string;
+  logoPath: string | null;
+}
+
 const NAV_ITEMS = [
   { key: "integrations", icon: PlugZap, label: "Integrations" },
   { key: "pricing", icon: DollarSign, label: "Pricing" },
   { key: "ai-efficiency", icon: Zap, label: "AI Efficiency" },
+  { key: "branding", icon: Palette, label: "Branding" },
 ];
 
 export default function SettingsPage() {
@@ -41,16 +48,37 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("integrations");
 
+  // Branding state
+  const [branding, setBranding] = useState<Branding>({ companyName: "", tagline: "", logoPath: null });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [savingBranding, setSavingBranding] = useState(false);
+
   useEffect(() => {
-    const fetchSettings = async () => {
+    const fetchAll = async () => {
+      const token = storage.getAccessToken();
       try {
-        const token = storage.getAccessToken();
-        const res = await fetch(`${API_BASE_URL}/api/v1/proposal-intelligence/settings`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (res.ok) {
-          const json = await res.json();
+        const [settingsRes, brandingRes] = await Promise.allSettled([
+          fetch(`${API_BASE_URL}/api/v1/proposal-intelligence/settings`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }),
+          fetch(`${API_BASE_URL}${API_ENDPOINTS.branding.get}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }),
+        ]);
+
+        if (settingsRes.status === "fulfilled" && settingsRes.value.ok) {
+          const json = await settingsRes.value.json();
           setSettings(json.data);
+        }
+        if (brandingRes.status === "fulfilled" && brandingRes.value.ok) {
+          const json = await brandingRes.value.json();
+          const d = json.data;
+          setBranding({
+            companyName: d.companyName || "",
+            tagline: d.tagline || "",
+            logoPath: d.logoPath || null,
+          });
         }
       } catch {
         message.error("Failed to load settings");
@@ -58,7 +86,7 @@ export default function SettingsPage() {
         setFetching(false);
       }
     };
-    fetchSettings();
+    fetchAll();
     dispatch(fetchGoogleStatusRequest());
   }, [dispatch]);
 
@@ -112,6 +140,48 @@ export default function SettingsPage() {
   const handleGoogleDisconnect = () => {
     dispatch(disconnectGoogleRequest());
     message.success("Google Calendar disconnected");
+  };
+
+  const handleSaveBranding = async () => {
+    setSavingBranding(true);
+    try {
+      const token = storage.getAccessToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      // Save text fields
+      const textRes = await fetch(`${API_BASE_URL}${API_ENDPOINTS.branding.update}`, {
+        method: "PUT",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: branding.companyName,
+          tagline: branding.tagline || null,
+        }),
+      });
+      if (!textRes.ok) throw new Error("Failed to save branding");
+
+      // Upload logo if a new one was selected
+      if (logoFile) {
+        const fd = new FormData();
+        fd.append("file", logoFile);
+        const logoRes = await fetch(`${API_BASE_URL}${API_ENDPOINTS.branding.uploadLogo}`, {
+          method: "POST",
+          headers,
+          body: fd,
+        });
+        if (logoRes.ok) {
+          const json = await logoRes.json();
+          setBranding((b) => ({ ...b, logoPath: json.data.logoPath || null }));
+        }
+        setLogoFile(null);
+        setLogoPreview(null);
+      }
+
+      message.success("Branding saved");
+    } catch {
+      message.error("Failed to save branding");
+    } finally {
+      setSavingBranding(false);
+    }
   };
 
   if (fetching) {
@@ -288,10 +358,147 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {activeTab === "branding" && (
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <Palette className="w-5 h-5 text-zinc-500" />
+                <h3 className="text-base font-semibold text-zinc-800 m-0">Company Branding</h3>
+              </div>
+              <p className="text-sm text-zinc-400 mt-1 mb-6">
+                Your company name and logo appear on all shared BRD documents.
+              </p>
+
+              <div className="space-y-6 max-w-md">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-1">
+                    Company Name
+                  </label>
+                  <Input
+                    value={branding.companyName}
+                    onChange={(e) => setBranding((b) => ({ ...b, companyName: e.target.value }))}
+                    placeholder="e.g. Appmotiv Technologies"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-1">
+                    Tagline <span className="text-zinc-300 font-normal normal-case">(optional)</span>
+                  </label>
+                  <Input
+                    value={branding.tagline}
+                    onChange={(e) => setBranding((b) => ({ ...b, tagline: e.target.value }))}
+                    placeholder="e.g. Building Digital Products"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-2">
+                    Company Logo
+                  </label>
+
+                  {/* Current logo preview */}
+                  {(logoPreview || branding.logoPath) && (
+                    <div className="mb-3 flex items-center gap-3">
+                      <div className="w-24 h-12 border border-zinc-200 rounded-lg bg-zinc-50 flex items-center justify-center overflow-hidden">
+                        <img
+                          src={logoPreview || (branding.logoPath ? `${API_BASE_URL}${branding.logoPath}` : "")}
+                          alt="Logo preview"
+                          className="max-h-10 max-w-full object-contain"
+                        />
+                      </div>
+                      {logoPreview && (
+                        <div className="text-xs text-zinc-500">
+                          <p className="font-medium">New logo selected</p>
+                          <button
+                            className="text-red-500 hover:text-red-700 mt-0.5"
+                            onClick={() => { setLogoFile(null); setLogoPreview(null); }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                      {!logoPreview && branding.logoPath && (
+                        <p className="text-xs text-zinc-400">Current logo</p>
+                      )}
+                    </div>
+                  )}
+
+                  <Upload.Dragger
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    showUploadList={false}
+                    beforeUpload={(file) => {
+                      const preview = URL.createObjectURL(file);
+                      setLogoFile(file);
+                      setLogoPreview(preview);
+                      return false;
+                    }}
+                    style={{ background: "transparent" }}
+                  >
+                    <div className="py-3">
+                      <UploadCloud className="w-6 h-6 text-zinc-400 mx-auto mb-1" />
+                      <p className="text-xs text-zinc-500">
+                        Click or drag PNG, JPEG, WebP, or SVG
+                      </p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">Max 5MB</p>
+                    </div>
+                  </Upload.Dragger>
+                </div>
+
+                {/* Preview of how it will appear */}
+                {(branding.companyName || logoPreview || branding.logoPath) && (
+                  <div>
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-2">
+                      Preview — Shared document header
+                    </label>
+                    <div className="border border-zinc-200 rounded-xl p-4 bg-white flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {(logoPreview || branding.logoPath) ? (
+                          <img
+                            src={logoPreview || (branding.logoPath ? `${API_BASE_URL}${branding.logoPath}` : "")}
+                            alt="Logo"
+                            className="h-8 w-auto object-contain"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center">
+                            <span className="text-white text-xs font-bold">
+                              {branding.companyName.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-semibold text-zinc-900 leading-none">
+                            {branding.companyName || "Company Name"}
+                          </p>
+                          {branding.tagline && (
+                            <p className="text-[11px] text-zinc-400 leading-none mt-0.5">
+                              {branding.tagline}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-xs text-zinc-400">Read-only · Confidential</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end mt-8 pt-6 border-t border-zinc-100">
-            <Button type="primary" icon={<Save className="w-4 h-4" />} loading={saving} onClick={handleSave}>
-              Save Settings
-            </Button>
+            {activeTab === "branding" ? (
+              <Button
+                type="primary"
+                icon={<Save className="w-4 h-4" />}
+                loading={savingBranding}
+                onClick={handleSaveBranding}
+              >
+                Save Branding
+              </Button>
+            ) : (
+              <Button type="primary" icon={<Save className="w-4 h-4" />} loading={saving} onClick={handleSave}>
+                Save Settings
+              </Button>
+            )}
           </div>
         </div>
       </div>

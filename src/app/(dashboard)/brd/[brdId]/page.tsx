@@ -10,7 +10,11 @@ import {
   Building2,
   Clock,
   RefreshCw,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
+import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import {
@@ -40,19 +44,23 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const AGENT_ORDER = [
   "business_context",
   "requirements_analyst",
-  "user_stories_analyst",
-  "technical_analyst",
-  "data_analyst",
+  "process_workflow_analyst",
+  "nfr_compliance_analyst",
+  "validation_gap_analyst",
   "composer",
+  "quality_validator",
+  "brd_improver",
 ];
 
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   business_context: "Business Context Analyst",
-  requirements_analyst: "Requirements Analyst",
-  user_stories_analyst: "User Stories Analyst",
-  technical_analyst: "Technical Requirements Analyst",
-  data_analyst: "Data Requirements Analyst",
+  requirements_analyst: "Business Requirements Analyst",
+  process_workflow_analyst: "Process & Workflow Analyst",
+  nfr_compliance_analyst: "Non-Functional & Compliance Analyst",
+  validation_gap_analyst: "Validation & Gap Analyst",
   composer: "BRD Composer",
+  quality_validator: "Quality Validator",
+  brd_improver: "BRD Improver",
 };
 
 function formatDate(iso: string) {
@@ -74,7 +82,52 @@ export default function BRDDetailPage() {
   const isLoading = useAppSelector(selectBRDLoading);
 
   const eventSourceRef = useRef<EventSource | null>(null);
-  const [activeTab, setActiveTab] = useState("brd");
+  const [activeTab, setActiveTab] = useState("improved-brd");
+
+  // Edit mode state
+  const [editingFile, setEditingFile] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  // Local override of ai_content for immediate post-save update
+  const [localContent, setLocalContent] = useState<Record<string, string>>({});
+
+  const handleStartEdit = (fileName: string, currentContent: string) => {
+    setEditingFile(fileName);
+    setEditContent(currentContent);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingFile(null);
+    setEditContent("");
+  };
+
+  const handleSave = async (fileName: string) => {
+    setIsSaving(true);
+    try {
+      const token = storage.getAccessToken();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}${API_ENDPOINTS.brd.updateContent(brdId)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ file_name: fileName, content: editContent }),
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Update local content immediately so the view reflects changes
+      setLocalContent((prev) => ({ ...prev, [fileName]: editContent }));
+      setEditingFile(null);
+      setEditContent("");
+      message.success("Saved successfully");
+    } catch {
+      message.error("Failed to save. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const startSSE = useCallback(
     (jobId: string) => {
@@ -181,14 +234,17 @@ export default function BRDDetailPage() {
         order: idx,
       }));
 
-  const aiContent = brd?.aiContent || {};
+  // Merge server ai_content with any locally saved edits
+  const aiContent = { ...(brd?.aiContent || {}), ...localContent };
   const outputFiles = [
-    { key: "brd", label: "Full BRD", file: "brd.md" },
+    { key: "improved-brd", label: "Final BRD", file: "improved-brd.md" },
+    { key: "quality-report", label: "Quality Report", file: "quality-report.md" },
+    { key: "brd", label: "Draft BRD", file: "brd.md" },
     { key: "business-context", label: "Business Context", file: "business-context.md" },
-    { key: "functional-requirements", label: "Functional Req.", file: "functional-requirements.md" },
-    { key: "user-stories", label: "User Stories", file: "user-stories.md" },
-    { key: "technical-requirements", label: "Technical Req.", file: "technical-requirements.md" },
-    { key: "data-requirements", label: "Data Requirements", file: "data-requirements.md" },
+    { key: "business-requirements", label: "Requirements", file: "business-requirements.md" },
+    { key: "process-workflow", label: "Processes & Workflows", file: "process-workflow.md" },
+    { key: "nfr-compliance", label: "NFR & Compliance", file: "nfr-compliance.md" },
+    { key: "validation-gap", label: "Validation & Gaps", file: "validation-gap.md" },
   ];
 
   if (isLoading && !brd) {
@@ -306,18 +362,82 @@ export default function BRDDetailPage() {
       ) : isCompleted && Object.keys(aiContent).length > 0 ? (
         <Tabs
           activeKey={activeTab}
-          onChange={setActiveTab}
+          onChange={(key) => {
+            // Cancel edit if switching tabs
+            if (editingFile) handleCancelEdit();
+            setActiveTab(key);
+          }}
           items={outputFiles
             .filter((f) => aiContent[f.file])
-            .map((f) => ({
-              key: f.key,
-              label: f.label,
-              children: (
-                <div className="bg-white border border-zinc-200 rounded-xl p-6 mt-2">
-                  <MarkdownRenderer content={aiContent[f.file] || ""} />
-                </div>
-              ),
-            }))}
+            .map((f) => {
+              const isEditing = editingFile === f.file;
+              const content = aiContent[f.file] || "";
+              return {
+                key: f.key,
+                label: f.label,
+                children: (
+                  <div className="bg-white border border-zinc-200 rounded-xl mt-2 overflow-hidden">
+                    {/* Toolbar */}
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-100 bg-zinc-50">
+                      <Typography.Text className="text-xs text-zinc-400">
+                        {isEditing ? "Editing — Markdown supported" : f.label}
+                      </Typography.Text>
+                      <div className="flex items-center gap-2">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              size="small"
+                              icon={<X className="w-3.5 h-3.5" />}
+                              onClick={handleCancelEdit}
+                              disabled={isSaving}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="small"
+                              type="primary"
+                              icon={isSaving
+                                ? <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                                : <Save className="w-3.5 h-3.5" />
+                              }
+                              onClick={() => handleSave(f.file)}
+                              loading={isSaving}
+                              className="!bg-black"
+                            >
+                              Save
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="small"
+                            icon={<Pencil className="w-3.5 h-3.5" />}
+                            onClick={() => handleStartEdit(f.file, content)}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Content — view or edit */}
+                    {isEditing ? (
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="w-full font-mono text-sm text-zinc-800 leading-relaxed p-6 outline-none resize-none bg-white"
+                        style={{ minHeight: 600 }}
+                        spellCheck={false}
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="p-6">
+                        <MarkdownRenderer content={content} />
+                      </div>
+                    )}
+                  </div>
+                ),
+              };
+            })}
         />
       ) : brd.status === "failed" ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">

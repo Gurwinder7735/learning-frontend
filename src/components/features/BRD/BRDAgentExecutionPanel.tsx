@@ -7,19 +7,23 @@ import {
   Brain,
   Building2,
   ListChecks,
-  BookUser,
-  ServerCog,
-  Database,
+  GitMerge,
+  ShieldCheck,
+  SearchCheck,
   FileText,
+  ClipboardCheck,
+  Wand2,
 } from "lucide-react";
 
 const AGENT_CONFIG: Record<string, { icon: typeof Brain; color: string }> = {
   business_context: { icon: Building2, color: "text-blue-600" },
   requirements_analyst: { icon: ListChecks, color: "text-purple-600" },
-  user_stories_analyst: { icon: BookUser, color: "text-orange-600" },
-  technical_analyst: { icon: ServerCog, color: "text-teal-600" },
-  data_analyst: { icon: Database, color: "text-yellow-600" },
+  process_workflow_analyst: { icon: GitMerge, color: "text-orange-600" },
+  nfr_compliance_analyst: { icon: ShieldCheck, color: "text-teal-600" },
+  validation_gap_analyst: { icon: SearchCheck, color: "text-amber-600" },
   composer: { icon: FileText, color: "text-rose-600" },
+  quality_validator: { icon: ClipboardCheck, color: "text-indigo-600" },
+  brd_improver: { icon: Wand2, color: "text-emerald-600" },
 };
 
 interface AgentStatus {
