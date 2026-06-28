@@ -3,6 +3,7 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
 
 interface Props {
@@ -118,7 +119,11 @@ const components: Components = {
 export function MarkdownRenderer({ content, className = "" }: Props) {
   return (
     <div className={className}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
     </div>
