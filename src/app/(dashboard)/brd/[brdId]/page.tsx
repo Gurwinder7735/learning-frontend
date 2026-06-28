@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useParams } from "next/navigation";
-import { Button, Tabs, Tag, Typography, Spin, message } from "antd";
+import { Button, Tabs, Tag, Typography, Spin, message, Modal, Input } from "antd";
 import {
   Share2,
   Copy,
@@ -13,6 +13,8 @@ import {
   Pencil,
   Save,
   X,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -91,6 +93,12 @@ export default function BRDDetailPage() {
   // Local override of ai_content for immediate post-save update
   const [localContent, setLocalContent] = useState<Record<string, string>>({});
 
+  // Password state
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [isPasswordProtected, setIsPasswordProtected] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+
   const handleStartEdit = (fileName: string, currentContent: string) => {
     setEditingFile(fileName);
     setEditContent(currentContent);
@@ -99,6 +107,33 @@ export default function BRDDetailPage() {
   const handleCancelEdit = () => {
     setEditingFile(null);
     setEditContent("");
+  };
+
+  const handleSetPassword = async (remove = false) => {
+    setSavingPassword(true);
+    try {
+      const token = storage.getAccessToken();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}${API_ENDPOINTS.brd.setPassword(brdId)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ password: remove ? null : newPassword }),
+        }
+      );
+      if (!res.ok) throw new Error();
+      setIsPasswordProtected(!remove);
+      setPasswordModalOpen(false);
+      setNewPassword("");
+      message.success(remove ? "Password removed" : "Password set successfully");
+    } catch {
+      message.error("Failed to update password");
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   const handleSave = async (fileName: string) => {
@@ -200,6 +235,11 @@ export default function BRDDetailPage() {
     dispatch(clearGeneration());
     dispatch(fetchBRDDetailRequest(brdId));
   }, [brdId, dispatch]);
+
+  // Sync password protection state from BRD
+  useEffect(() => {
+    if (brd) setIsPasswordProtected(!!brd.isPasswordProtected);
+  }, [brd?.id]); // eslint-disable-line
 
   useEffect(() => {
     if (!brd) return;
@@ -314,6 +354,25 @@ export default function BRDDetailPage() {
               >
                 Open Share View
               </Button>
+              {isPasswordProtected ? (
+                <Button
+                  icon={<LockOpen className="w-3.5 h-3.5" />}
+                  size="small"
+                  danger
+                  onClick={() => handleSetPassword(true)}
+                  loading={savingPassword}
+                >
+                  Remove Password
+                </Button>
+              ) : (
+                <Button
+                  icon={<Lock className="w-3.5 h-3.5" />}
+                  size="small"
+                  onClick={() => setPasswordModalOpen(true)}
+                >
+                  Set Password
+                </Button>
+              )}
             </>
           )}
           <Button
@@ -322,6 +381,28 @@ export default function BRDDetailPage() {
             onClick={() => dispatch(fetchBRDDetailRequest(brdId))}
           />
         </div>
+
+        {/* Set Password modal */}
+        <Modal
+          title="Set Share Password"
+          open={passwordModalOpen}
+          onCancel={() => { setPasswordModalOpen(false); setNewPassword(""); }}
+          onOk={() => handleSetPassword(false)}
+          okText="Set Password"
+          confirmLoading={savingPassword}
+          okButtonProps={{ disabled: newPassword.length < 4 }}
+        >
+          <p className="text-sm text-zinc-500 mb-4">
+            Anyone opening the share link will need to enter this password before viewing the document.
+          </p>
+          <Input.Password
+            placeholder="Enter a password (min 4 characters)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            onPressEnter={() => newPassword.length >= 4 && handleSetPassword(false)}
+            autoFocus
+          />
+        </Modal>
       </div>
 
       {/* Content */}

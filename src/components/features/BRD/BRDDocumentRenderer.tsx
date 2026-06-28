@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { List, X } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -235,6 +236,86 @@ function TableOfContents({
   );
 }
 
+// ─── Mobile TOC overlay ──────────────────────────────────────────────────────
+
+function MobileTOC({
+  headings,
+  activeId,
+  onItemClick,
+}: {
+  headings: Heading[];
+  activeId: string;
+  onItemClick: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (headings.length === 0) return null;
+
+  const handleClick = (id: string) => {
+    onItemClick(id);
+    setOpen(false);
+  };
+
+  return (
+    <>
+      {/* Floating trigger — mobile only */}
+      <button
+        onClick={() => setOpen(true)}
+        className="lg:hidden fixed bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-zinc-900 text-white text-xs font-semibold rounded-full px-4 py-2.5 shadow-xl z-20 print:hidden"
+      >
+        <List className="w-3.5 h-3.5" />
+        Contents
+      </button>
+
+      {/* Overlay backdrop */}
+      {open && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/40 z-40 print:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* Slide-up panel */}
+      <div
+        className={`lg:hidden fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 transition-transform duration-300 max-h-[70vh] flex flex-col print:hidden ${
+          open ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-zinc-100">
+          <p className="text-sm font-bold text-zinc-900">Table of Contents</p>
+          <button
+            onClick={() => setOpen(false)}
+            className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 hover:bg-zinc-200 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 py-3 flex-1">
+          <ul className="space-y-0.5">
+            {headings.map((h) => (
+              <li key={h.id}>
+                <button
+                  onClick={() => handleClick(h.id)}
+                  className={`w-full text-left text-sm rounded-xl px-3 py-2.5 transition-colors ${
+                    h.level === 3 ? "pl-7" : ""
+                  } ${
+                    activeId === h.id
+                      ? "bg-zinc-900 text-white font-semibold"
+                      : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                  }`}
+                >
+                  {h.text}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="h-safe-area-inset-bottom" />
+      </div>
+    </>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -293,18 +374,23 @@ export function BRDDocumentRenderer({ content }: Props) {
   }, [content]); // eslint-disable-line
 
   return (
-    <div className="flex gap-10 items-start">
-      {/* Sidebar TOC — visible on lg+. sticky must be on the flex child itself. */}
-      <aside className="hidden lg:block w-52 shrink-0 sticky top-20 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto">
-        <TableOfContents headings={headings} activeId={activeId} onItemClick={handleTocClick} />
-      </aside>
+    <>
+      <div className="flex gap-10 items-start">
+        {/* Sidebar TOC — desktop only (lg+). sticky must be on the flex child itself. */}
+        <aside className="hidden lg:block w-52 shrink-0 sticky top-20 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto">
+          <TableOfContents headings={headings} activeId={activeId} onItemClick={handleTocClick} />
+        </aside>
 
-      {/* Document body */}
-      <div className="flex-1 min-w-0">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-          {content}
-        </ReactMarkdown>
+        {/* Document body */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+            {content}
+          </ReactMarkdown>
+        </div>
       </div>
-    </div>
+
+      {/* Mobile TOC — floating button + slide-up panel */}
+      <MobileTOC headings={headings} activeId={activeId} onItemClick={handleTocClick} />
+    </>
   );
 }

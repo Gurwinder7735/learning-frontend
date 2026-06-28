@@ -36,9 +36,18 @@ export interface BRD {
   brdJobId?: string | null;
   aiContent?: Record<string, string> | null;
   documentIds: string[];
+  isPasswordProtected?: boolean;
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BRDComment {
+  id: string;
+  commenterName: string;
+  commenterEmail?: string | null;
+  content: string;
+  createdAt: string;
 }
 
 export interface BRDSSEData {
