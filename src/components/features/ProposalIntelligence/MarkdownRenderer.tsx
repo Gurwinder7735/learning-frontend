@@ -12,6 +12,60 @@ interface Props {
   className?: string;
 }
 
+/**
+ * Joins multi-line table cell content into a single properly-closed row.
+ *
+ * AI agents often write table rows where a cell's content spans multiple
+ * physical lines (e.g. numbered lists inside a cell). GFM requires every
+ * row to be a single line that starts AND ends with `|`. This function:
+ *  1. Detects continuation lines (non-empty, no leading `|`, after a table line)
+ *  2. Appends them to the previous row using `<br>`
+ *  3. Ensures every merged row ends with ` |` so the GFM parser can
+ *     correctly identify the last column boundary.
+ */
+function fixTableCells(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inTable = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const startsWithPipe = trimmed.startsWith("|");
+
+    if (startsWithPipe) {
+      inTable = true;
+      out.push(line);
+    } else if (inTable && trimmed) {
+      // Continuation line — merge into the previous row
+      let prev = out[out.length - 1].trimEnd();
+
+      if (prev.endsWith("|")) {
+        // Row had a closing pipe: insert `<br>` before it
+        out[out.length - 1] =
+          prev.slice(0, -1).trimEnd() + " <br> " + trimmed + " |";
+      } else {
+        // Row was not yet closed: append and add a closing pipe
+        out[out.length - 1] = prev + " <br> " + trimmed + " |";
+      }
+    } else {
+      // Blank line exits table context
+      if (!trimmed) inTable = false;
+      out.push(line);
+    }
+  }
+
+  // Final pass: any table row still missing its closing `|` gets one added
+  return out
+    .map((line) => {
+      const t = line.trim();
+      if (t.startsWith("|") && !t.endsWith("|")) {
+        return line.trimEnd() + " |";
+      }
+      return line;
+    })
+    .join("\n");
+}
+
 function Table(props: React.ComponentPropsWithoutRef<"table">) {
   return (
     <div className="overflow-x-auto my-4 rounded-xl border border-zinc-200">
@@ -118,6 +172,7 @@ const components: Components = {
 };
 
 export function MarkdownRenderer({ content, className = "" }: Props) {
+  const processed = fixTableCells(content);
   return (
     <div className={className}>
       <ReactMarkdown
@@ -125,7 +180,7 @@ export function MarkdownRenderer({ content, className = "" }: Props) {
         rehypePlugins={[rehypeRaw]}
         components={components}
       >
-        {content}
+        {processed}
       </ReactMarkdown>
     </div>
   );

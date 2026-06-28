@@ -6,6 +6,40 @@ import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
+
+function fixTableCells(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inTable = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const startsWithPipe = trimmed.startsWith("|");
+
+    if (startsWithPipe) {
+      inTable = true;
+      out.push(line);
+    } else if (inTable && trimmed) {
+      let prev = out[out.length - 1].trimEnd();
+      if (prev.endsWith("|")) {
+        out[out.length - 1] = prev.slice(0, -1).trimEnd() + " <br> " + trimmed + " |";
+      } else {
+        out[out.length - 1] = prev + " <br> " + trimmed + " |";
+      }
+    } else {
+      if (!trimmed) inTable = false;
+      out.push(line);
+    }
+  }
+
+  return out
+    .map((line) => {
+      const t = line.trim();
+      if (t.startsWith("|") && !t.endsWith("|")) return line.trimEnd() + " |";
+      return line;
+    })
+    .join("\n");
+}
 import { List, X } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -386,7 +420,7 @@ export function BRDDocumentRenderer({ content }: Props) {
         {/* Document body */}
         <div className="flex-1 min-w-0 overflow-hidden">
           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={components}>
-            {content}
+            {fixTableCells(content)}
           </ReactMarkdown>
         </div>
       </div>
