@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
 import { List, X } from "lucide-react";
 
@@ -383,7 +385,7 @@ export function BRDDocumentRenderer({ content }: Props) {
 
         {/* Document body */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={components}>
             {content}
           </ReactMarkdown>
         </div>
