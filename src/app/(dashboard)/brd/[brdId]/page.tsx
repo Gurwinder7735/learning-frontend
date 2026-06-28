@@ -36,6 +36,7 @@ import {
   selectBRDLoading,
 } from "@/store/modules/brd/brdSelectors";
 import { BRDAgentExecutionPanel } from "@/components/features/BRD/BRDAgentExecutionPanel";
+import { BRDContentEditor } from "@/components/features/BRD/BRDContentEditor";
 import { MarkdownRenderer } from "@/components/features/ProposalIntelligence/MarkdownRenderer";
 import { storage } from "@/lib/utils/storage";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -457,11 +458,11 @@ export default function BRDDetailPage() {
                 key: f.key,
                 label: f.label,
                 children: (
-                  <div className="bg-white border border-zinc-200 rounded-xl mt-2 overflow-hidden">
+                  <div className="mt-2">
                     {/* Toolbar */}
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-100 bg-zinc-50">
+                    <div className="flex items-center justify-between px-3 py-2 mb-2">
                       <Typography.Text className="text-xs text-zinc-400">
-                        {isEditing ? "Editing — Markdown supported" : f.label}
+                        {isEditing ? "Editing with CKEditor" : f.label}
                       </Typography.Text>
                       <div className="flex items-center gap-2">
                         {isEditing ? (
@@ -500,18 +501,15 @@ export default function BRDDetailPage() {
                       </div>
                     </div>
 
-                    {/* Content — view or edit */}
+                    {/* Edit mode: CKEditor (Markdown in/out). View mode: MarkdownRenderer */}
                     {isEditing ? (
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="w-full font-mono text-sm text-zinc-800 leading-relaxed p-6 outline-none resize-none bg-white"
-                        style={{ minHeight: 600 }}
-                        spellCheck={false}
-                        autoFocus
+                      <BRDContentEditor
+                        content={editContent}
+                        onChange={(md) => setEditContent(md)}
+                        disabled={isSaving}
                       />
                     ) : (
-                      <div className="p-6">
+                      <div className="bg-white border border-zinc-200 rounded-xl p-6">
                         <MarkdownRenderer content={content} />
                       </div>
                     )}

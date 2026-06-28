@@ -31,3 +31,41 @@
     --foreground: #ededed;
   }
 }
+
+/* ─── CKEditor viewer — remove toolbar chrome, keep content styling ─── */
+.brd-viewer-wrap .ck.ck-editor__top {
+  display: none !important;
+}
+.brd-viewer-wrap .ck.ck-editor__main > .ck-editor__editable {
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  background: transparent !important;
+  cursor: default !important;
+}
+.brd-viewer-wrap .ck.ck-editor__main > .ck-editor__editable:focus {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ─── CKEditor editor — clean rounded styling ─── */
+.brd-editor-wrap .ck.ck-editor {
+  border-radius: 12px !important;
+  overflow: hidden;
+  border: 1px solid #e4e4e7 !important;
+}
+.brd-editor-wrap .ck.ck-toolbar {
+  border-bottom: 1px solid #e4e4e7 !important;
+  background: #fafafa !important;
+}
+.brd-editor-wrap .ck.ck-editor__main > .ck-editor__editable {
+  min-height: 400px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #18181b;
+  padding: 24px 28px !important;
+}
+.brd-editor-wrap .ck.ck-editor__main > .ck-editor__editable:focus {
+  border: none !important;
+  box-shadow: none !important;
+}
