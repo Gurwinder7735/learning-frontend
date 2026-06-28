@@ -524,16 +524,13 @@ export default function SharedBRDPage() {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               {logoUrl ? (
-                <img src={logoUrl} alt={companyName} className="h-8 w-auto object-contain shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                <img src={logoUrl} alt={companyName} className="h-16 w-auto object-contain shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
               ) : (
                 <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center shrink-0">
                   <BookText className="w-4 h-4 text-white" />
                 </div>
               )}
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-zinc-900 leading-none truncate">{companyName}</p>
-                {tagline && <p className="text-[11px] text-zinc-400 leading-none mt-0.5 truncate">{tagline}</p>}
-              </div>
+             
             </div>
             <div className="flex items-center gap-3 shrink-0">
               {brd.isPasswordProtected && (
