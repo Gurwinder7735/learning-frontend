@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button, Tabs, Tag, Typography, Spin, message, Modal, Input } from "antd";
 import {
   Share2,
@@ -15,6 +15,7 @@ import {
   X,
   Lock,
   LockOpen,
+  Trash2,
 } from "lucide-react";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -84,6 +85,7 @@ export default function BRDDetailPage() {
   const isGenerating = useAppSelector(selectIsGenerating);
   const isLoading = useAppSelector(selectBRDLoading);
 
+  const router = useRouter();
   const eventSourceRef = useRef<EventSource | null>(null);
   const [activeTab, setActiveTab] = useState("improved-brd");
 
@@ -108,6 +110,32 @@ export default function BRDDetailPage() {
   const handleCancelEdit = () => {
     setEditingFile(null);
     setEditContent("");
+  };
+
+  const handleDelete = () => {
+    Modal.confirm({
+      title: "Delete BRD",
+      content: `Delete "${brd?.name}"? This cannot be undone.`,
+      okText: "Delete",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const token = storage.getAccessToken();
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}${API_ENDPOINTS.brd.delete(brdId)}`,
+            {
+              method: "DELETE",
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            }
+          );
+          if (!res.ok) throw new Error();
+          message.success("BRD deleted");
+          router.replace("/brd");
+        } catch {
+          message.error("Failed to delete BRD");
+        }
+      },
+    });
   };
 
   const handleSetPassword = async (remove = false) => {
@@ -380,6 +408,12 @@ export default function BRDDetailPage() {
             icon={<RefreshCw className="w-3.5 h-3.5" />}
             size="small"
             onClick={() => dispatch(fetchBRDDetailRequest(brdId))}
+          />
+          <Button
+            icon={<Trash2 className="w-3.5 h-3.5" />}
+            size="small"
+            danger
+            onClick={handleDelete}
           />
         </div>
 

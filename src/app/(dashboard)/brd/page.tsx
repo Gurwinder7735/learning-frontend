@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Card, Tag, Typography, Drawer, Modal, message } from "antd";
-import { BookText, Sparkles, Loader2, Building2, Clock, CheckCircle } from "lucide-react";
+import { Button, Card, Tag, Typography, Drawer, Modal, message, Dropdown } from "antd";
+import { BookText, Sparkles, Loader2, Building2, Clock, CheckCircle, MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -58,6 +58,29 @@ export default function BRDPage() {
     dispatch(fetchBRDsRequest());
     dispatch(fetchClientsRequest({ limit: 200 }));
   }, [dispatch]);
+
+  const handleDelete = (brd: BRD) => {
+    Modal.confirm({
+      title: "Delete BRD",
+      content: `Delete "${brd.name}"? This cannot be undone.`,
+      okText: "Delete",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const token = storage.getAccessToken();
+          const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/${brd.id}`, {
+            method: "DELETE",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (!res.ok) throw new Error();
+          message.success("BRD deleted");
+          dispatch(fetchBRDsRequest());
+        } catch {
+          message.error("Failed to delete BRD");
+        }
+      },
+    });
+  };
 
   const handleGenerate = async (formData: {
     name: string;
@@ -139,54 +162,79 @@ export default function BRDPage() {
       ) : (
         <div className="space-y-2">
           {brds.map((brd: BRD) => (
-            <Link key={brd.id} href={`${APP_ROUTES.brd}/${brd.id}`} className="block group">
-              <Card
-                className="!rounded-xl !border-zinc-200 !shadow-sm hover:!shadow-md hover:!border-zinc-300 transition-all !cursor-pointer"
-                size="small"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0 group-hover:bg-zinc-200 transition-colors">
-                    <BookText className="w-5 h-5 text-zinc-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Typography.Text className="text-sm font-semibold text-zinc-900 group-hover:text-blue-600 transition-colors truncate max-w-[240px]">
-                        {brd.name}
-                      </Typography.Text>
-                      <Tag
-                        color={statusColors[brd.status] || "default"}
-                        className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none !h-[18px] !flex !items-center shrink-0"
-                      >
-                        {statusLabels[brd.status] || brd.status}
-                      </Tag>
+            <div key={brd.id} className="relative group">
+              <Link href={`${APP_ROUTES.brd}/${brd.id}`} className="block">
+                <Card
+                  className="!rounded-xl !border-zinc-200 !shadow-sm hover:!shadow-md hover:!border-zinc-300 transition-all !cursor-pointer"
+                  size="small"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0 group-hover:bg-zinc-200 transition-colors">
+                      <BookText className="w-5 h-5 text-zinc-500" />
                     </div>
-                    <div className="flex items-center gap-4 mt-1 text-xs text-zinc-500">
-                      {brd.clientName && (
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Typography.Text className="text-sm font-semibold text-zinc-900 group-hover:text-blue-600 transition-colors truncate max-w-[240px]">
+                          {brd.name}
+                        </Typography.Text>
+                        <Tag
+                          color={statusColors[brd.status] || "default"}
+                          className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none !h-[18px] !flex !items-center shrink-0"
+                        >
+                          {statusLabels[brd.status] || brd.status}
+                        </Tag>
+                      </div>
+                      <div className="flex items-center gap-4 mt-1 text-xs text-zinc-500">
+                        {brd.clientName && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            {brd.clientName}
+                          </span>
+                        )}
+                        {brd.documentIds.length > 0 && (
+                          <span>{brd.documentIds.length} document{brd.documentIds.length !== 1 ? "s" : ""}</span>
+                        )}
                         <span className="flex items-center gap-1">
-                          <Building2 className="w-3 h-3" />
-                          {brd.clientName}
+                          <Clock className="w-3 h-3" />
+                          {formatDate(brd.createdAt)}
                         </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      {brd.status === "completed" && (
+                        <CheckCircle className="w-4 h-4 text-emerald-500" />
                       )}
-                      {brd.documentIds.length > 0 && (
-                        <span>{brd.documentIds.length} document{brd.documentIds.length !== 1 ? "s" : ""}</span>
+                      {brd.status === "generating" && (
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                       )}
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatDate(brd.createdAt)}
-                      </span>
+                      {/* 3-dot menu */}
+                      <Dropdown
+                        menu={{
+                          items: [
+                            {
+                              key: "delete",
+                              label: "Delete",
+                              danger: true,
+                              icon: <Trash2 className="w-3.5 h-3.5" />,
+                              onClick: () => handleDelete(brd),
+                            },
+                          ],
+                        }}
+                        trigger={["click"]}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<MoreHorizontal className="w-4 h-4" />}
+                          className="!text-zinc-400 hover:!text-zinc-700 -mr-1"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        />
+                      </Dropdown>
                     </div>
                   </div>
-                  <div className="shrink-0">
-                    {brd.status === "completed" && (
-                      <CheckCircle className="w-4 h-4 text-emerald-500" />
-                    )}
-                    {brd.status === "generating" && (
-                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                    )}
-                  </div>
-                </div>
-              </Card>
-            </Link>
+                </Card>
+              </Link>
+            </div>
           ))}
         </div>
       )}

@@ -99,6 +99,7 @@ export const API_ENDPOINTS = {
     generate: "/api/v1/brd/generate",
     list: "/api/v1/brd/brds",
     detail: (id: string) => `/api/v1/brd/brds/${id}`,
+    delete: (id: string) => `/api/v1/brd/brds/${id}`,
     updateContent: (id: string) => `/api/v1/brd/brds/${id}/content`,
     setPassword: (id: string) => `/api/v1/brd/brds/${id}/set-password`,
     share: (token: string) => `/api/v1/brd/brds/share/${token}`,
