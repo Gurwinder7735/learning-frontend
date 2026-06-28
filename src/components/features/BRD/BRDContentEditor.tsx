@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { CKEditor } from "@ckeditor/ckeditor5-react";
 import {
   ClassicEditor,
@@ -15,37 +16,63 @@ import {
   Paragraph,
   Table,
   TableToolbar,
+  TableColumnResize,
   HorizontalLine,
   CodeBlock,
   Code,
   Essentials,
   Indent,
   IndentBlock,
-  Markdown,
 } from "ckeditor5";
 import "ckeditor5/ckeditor5.css";
 
 interface Props {
-  /** Raw Markdown string */
   content: string;
-  /** Called with the updated Markdown string on every change */
-  onChange: (markdown: string) => void;
+  onChange: (html: string) => void;
   disabled?: boolean;
 }
 
+/** Returns true when content looks like Markdown rather than HTML. */
+function isMarkdown(s: string): boolean {
+  const t = s.trim();
+  return t.length > 0 && !t.startsWith("<");
+}
+
+/** Convert Markdown → HTML using marked (lazy-loaded). */
+async function toHtml(content: string): Promise<string> {
+  if (!isMarkdown(content)) return content;
+  const { marked } = await import("marked");
+  return marked(content) as string;
+}
+
 export function BRDContentEditor({ content, onChange, disabled = false }: Props) {
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Only convert on initial mount — subsequent edits are already HTML
+    toHtml(content).then(setHtmlContent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (htmlContent === null) {
+    return (
+      <div className="flex items-center justify-center py-12 border border-zinc-200 rounded-xl bg-white">
+        <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-700 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="brd-editor-wrap">
       <CKEditor
         editor={ClassicEditor}
-        data={content}
+        data={htmlContent}
         disabled={disabled}
         config={{
           licenseKey: "GPL",
           plugins: [
-            // Markdown plugin replaces the HTML data processor —
-            // CKEditor reads/writes Markdown instead of HTML
-            Markdown,
+            // No Markdown plugin — editor works natively in HTML.
+            // getData() returns HTML which is saved directly.
             Essentials,
             Autoformat,
             Bold,
@@ -59,6 +86,7 @@ export function BRDContentEditor({ content, onChange, disabled = false }: Props)
             Paragraph,
             Table,
             TableToolbar,
+            TableColumnResize,
             HorizontalLine,
             CodeBlock,
             Code,
@@ -108,7 +136,7 @@ export function BRDContentEditor({ content, onChange, disabled = false }: Props)
           },
         }}
         onChange={(_event, editor) => {
-          // editor.getData() returns Markdown because of the Markdown plugin
+          // Save raw HTML — preserves column widths, styles, everything
           onChange(editor.getData());
         }}
       />

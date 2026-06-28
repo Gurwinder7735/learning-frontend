@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
+import "ckeditor5/ckeditor5-content.css";
 
 function fixTableCells(md: string): string {
   const lines = md.split("\n");
@@ -61,11 +62,10 @@ function slugify(text: string): string {
     .slice(0, 60);
 }
 
-/** Extract H2 / H3 headings from raw markdown text for the TOC. */
-function extractHeadings(markdown: string): Heading[] {
+/** Extract headings from Markdown text. */
+function extractHeadingsFromMarkdown(markdown: string): Heading[] {
   const headings: Heading[] = [];
   const seen = new Map<string, number>();
-
   for (const line of markdown.split("\n")) {
     const h2 = line.match(/^##\s+(.+)/);
     const h3 = line.match(/^###\s+(.+)/);
@@ -79,6 +79,40 @@ function extractHeadings(markdown: string): Heading[] {
     headings.push({ id: n === 0 ? base : `${base}-${n}`, text: raw, level });
   }
   return headings;
+}
+
+/** Extract H2/H3 headings from HTML and inject id attributes for TOC anchors. */
+function extractHeadingsFromHtml(html: string): { headings: Heading[]; processedHtml: string } {
+  const headings: Heading[] = [];
+  const seen = new Map<string, number>();
+
+  // Replace <h2> and <h3> tags — inject id and collect for TOC
+  const processedHtml = html.replace(
+    /<(h[23])([^>]*)>([\s\S]*?)<\/h[23]>/gi,
+    (_match, tag, attrs, inner) => {
+      const level = tag === "h2" ? 2 : 3;
+      // Strip existing HTML tags from the inner text to get plain text
+      const text = inner.replace(/<[^>]+>/g, "").trim();
+      const base = slugify(text);
+      const n = seen.get(base) || 0;
+      seen.set(base, n + 1);
+      const id = n === 0 ? base : `${base}-${n}`;
+      headings.push({ id, text, level });
+      // Preserve any existing attributes but add/replace id
+      const cleanAttrs = attrs.replace(/\s*id="[^"]*"/, "");
+      return `<${tag}${cleanAttrs} id="${id}">${inner}</${tag}>`;
+    }
+  );
+
+  return { headings, processedHtml };
+}
+
+/** Unified heading extractor — handles both Markdown and HTML. */
+function extractHeadings(content: string): Heading[] {
+  if (content.trim().startsWith("<")) {
+    return extractHeadingsFromHtml(content).headings;
+  }
+  return extractHeadingsFromMarkdown(content);
 }
 
 /** Smooth-scroll to an element by id, accounting for the sticky header. */
@@ -417,11 +451,20 @@ export function BRDDocumentRenderer({ content }: Props) {
           <TableOfContents headings={headings} activeId={activeId} onItemClick={handleTocClick} />
         </aside>
 
-        {/* Document body */}
+        {/* Document body — HTML (post-edit) or Markdown (AI-generated) */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={components}>
-            {fixTableCells(content)}
-          </ReactMarkdown>
+          {content.trim().startsWith("<") ? (
+            <div
+              className="ck-content prose prose-zinc max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: extractHeadingsFromHtml(content).processedHtml,
+              }}
+            />
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={components}>
+              {fixTableCells(content)}
+            </ReactMarkdown>
+          )}
         </div>
       </div>
 

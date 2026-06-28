@@ -38,7 +38,7 @@ import {
 } from "@/store/modules/brd/brdSelectors";
 import { BRDAgentExecutionPanel } from "@/components/features/BRD/BRDAgentExecutionPanel";
 import { BRDContentEditor } from "@/components/features/BRD/BRDContentEditor";
-import { MarkdownRenderer } from "@/components/features/ProposalIntelligence/MarkdownRenderer";
+import { SmartContentRenderer } from "@/components/features/BRD/SmartContentRenderer";
 import { storage } from "@/lib/utils/storage";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { BRDAgentRun } from "@/types/models/BRD";
@@ -544,7 +544,7 @@ export default function BRDDetailPage() {
                       />
                     ) : (
                       <div className="bg-white border border-zinc-200 rounded-xl p-6">
-                        <MarkdownRenderer content={content} />
+                        <SmartContentRenderer content={content} />
                       </div>
                     )}
                   </div>
