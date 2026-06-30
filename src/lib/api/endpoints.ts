@@ -105,6 +105,8 @@ export const API_ENDPOINTS = {
     share: (token: string) => `/api/v1/brd/brds/share/${token}`,
     verifyPassword: (token: string) => `/api/v1/brd/brds/share/${token}/verify`,
     comments: (token: string) => `/api/v1/brd/brds/share/${token}/comments`,
+    deleteComment: (token: string, commentId: string) => `/api/v1/brd/brds/share/${token}/comments/${commentId}`,
+    toggleCommentStatus: (token: string, commentId: string) => `/api/v1/brd/brds/share/${token}/comments/${commentId}/status`,
     jobs: "/api/v1/brd/jobs",
     jobDetail: (id: string) => `/api/v1/brd/jobs/${id}`,
     stream: (jobId: string) => `/api/v1/brd/jobs/${jobId}/stream`,

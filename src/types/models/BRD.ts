@@ -44,9 +44,13 @@ export interface BRD {
 
 export interface BRDComment {
   id: string;
+  parentId?: string | null;         // null = top-level; set = reply
   commenterName: string;
   commenterEmail?: string | null;
   content: string;
+  anchorY?: number | null;          // 0–100% of document height; null = bottom-section comment
+  anchorX?: number | null;          // 0–100% of container width
+  status: "open" | "resolved";
   createdAt: string;
 }
 

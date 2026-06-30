@@ -17,8 +17,11 @@ import {
   MessageSquare,
   Send,
   AlertCircle,
+  CheckCircle2,
+  CornerDownRight,
 } from "lucide-react";
 import { BRDDocumentRenderer } from "@/components/features/BRD/BRDDocumentRenderer";
+import { InlineCommentLayer } from "@/components/features/BRD/InlineCommentLayer";
 import type { BRD, BRDComment } from "@/types/models/BRD";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -69,6 +72,7 @@ function PasswordGate({
   onUnlock: (brdData: BRD) => void;
 }) {
   const { token } = useParams() as { token: string };
+  const [visitorName, setVisitorName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -76,7 +80,7 @@ function PasswordGate({
   const [unlocked, setUnlocked] = useState(false);
 
   const handleUnlock = async () => {
-    if (!password || loading) return;
+    if (!visitorName.trim() || !password || loading) return;
     setLoading(true);
     setError("");
     try {
@@ -91,7 +95,8 @@ function PasswordGate({
         setLoading(false);
         return;
       }
-      // Brief "unlocked" animation before revealing content
+      // Store viewer name so comment forms don't ask again this session
+      sessionStorage.setItem(`brd_viewer_name_${token}`, visitorName.trim());
       setUnlocked(true);
       sessionStorage.setItem(`brd_unlocked_${token}`, "true");
       setTimeout(() => onUnlock(json.data as BRD), 900);
@@ -151,6 +156,21 @@ function PasswordGate({
 
         {/* Input card */}
         <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
+
+          {/* Name field */}
+          <label className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 mb-2">
+            Your Name
+          </label>
+          <input
+            type="text"
+            placeholder="Enter your name"
+            value={visitorName}
+            onChange={(e) => setVisitorName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+            disabled={unlocked}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none focus:border-white/30 transition-colors mb-4"
+          />
+
           <label className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 mb-2">
             Access Password
           </label>
@@ -198,7 +218,7 @@ function PasswordGate({
           {/* Unlock button */}
           <button
             onClick={handleUnlock}
-            disabled={!password || loading || unlocked}
+            disabled={!visitorName.trim() || !password || loading || unlocked}
             className={`w-full rounded-xl py-3 text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
               unlocked
                 ? "bg-emerald-500 text-white"
@@ -231,35 +251,176 @@ function PasswordGate({
   );
 }
 
-// ─── Comments section ─────────────────────────────────────────────────────────
+// ─── Bottom comment thread component ──────────────────────────────────────────
 
-function CommentsSection({ token }: { token: string }) {
-  const [comments, setComments] = useState<BRDComment[]>([]);
-  const [loadingComments, setLoadingComments] = useState(true);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+function BottomCommentThread({
+  token,
+  topLevel,
+  allComments,
+  viewerName,
+  onCommentAdded,
+  onCommentUpdated,
+}: {
+  token: string;
+  topLevel: BRDComment[];
+  allComments: BRDComment[];
+  viewerName: string;
+  onCommentAdded: (c: BRDComment) => void;
+  onCommentUpdated: (c: BRDComment) => void;
+}) {
+  const [replyContent, setReplyContent] = useState<Record<string, string>>({});
+  const [replySubmitting, setReplySubmitting] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const repliesFor = (parentId: string) => allComments.filter((c) => c.parentId === parentId);
+
+  const handleReply = async (parentId: string) => {
+    const content = (replyContent[parentId] ?? "").trim();
+    if (!viewerName || !content || replySubmitting) return;
+    setReplySubmitting(parentId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commenter_name: viewerName, content, parent_id: parentId }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        onCommentAdded(json.data as BRDComment);
+        setReplyContent((prev) => ({ ...prev, [parentId]: "" }));
+      }
+    } catch { /* silent */ } finally { setReplySubmitting(null); }
+  };
+
+  const handleToggle = async (commentId: string) => {
+    setTogglingId(commentId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments/${commentId}/status`, { method: "PATCH" });
+      if (res.ok) { const json = await res.json(); onCommentUpdated(json.data as BRDComment); }
+    } catch { /* silent */ } finally { setTogglingId(null); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {topLevel.map((c) => {
+        const replies = repliesFor(c.id);
+        const isResolved = c.status === "resolved";
+        return (
+          <div key={c.id} className={`bg-white border rounded-2xl overflow-hidden ${isResolved ? "border-emerald-100" : "border-zinc-100"}`}>
+            {/* Top-level comment */}
+            <div className={`p-5 ${isResolved ? "opacity-70" : ""}`}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center shrink-0">
+                    <span className="text-white text-xs font-bold">{c.commenterName.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">{c.commenterName}</p>
+                    <p className="text-xs text-zinc-400">{formatRelative(c.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {isResolved && (
+                    <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                      <CheckCircle2 className="w-3 h-3" /> Resolved
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleToggle(c.id)}
+                    disabled={togglingId === c.id}
+                    className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 border transition-colors ${isResolved ? "border-zinc-200 text-zinc-500 hover:border-zinc-400" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}`}
+                  >
+                    {togglingId === c.id ? <div className="w-3 h-3 border border-zinc-300 border-t-emerald-500 rounded-full animate-spin" /> : isResolved ? "Reopen" : "Resolve"}
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap pl-10">{c.content}</p>
+            </div>
+
+            {/* Replies */}
+            {replies.length > 0 && (
+              <div className="border-t border-zinc-50 bg-zinc-50/50">
+                {replies.map((r) => (
+                  <div key={r.id} className="flex gap-2.5 px-5 py-3 border-b border-zinc-100 last:border-0">
+                    <CornerDownRight className="w-3.5 h-3.5 text-zinc-300 shrink-0 mt-1" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center shrink-0">
+                          <span className="text-white text-[8px] font-bold">{r.commenterName.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <span className="text-xs font-semibold text-zinc-800">{r.commenterName}</span>
+                        <span className="text-[10px] text-zinc-400">{formatRelative(r.createdAt)}</span>
+                      </div>
+                      <p className="text-xs text-zinc-600 leading-relaxed whitespace-pre-wrap pl-7">{r.content}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Reply form */}
+            <div className="border-t border-zinc-100 px-5 py-3 flex gap-2 items-end">
+              <textarea
+                placeholder={`Reply to ${c.commenterName}...`}
+                value={replyContent[c.id] ?? ""}
+                onChange={(e) => setReplyContent((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                rows={1}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleReply(c.id); }}
+                className="flex-1 border border-zinc-200 bg-zinc-50 rounded-xl px-3 py-2 text-xs outline-none focus:border-zinc-900 focus:bg-white focus:ring-1 focus:ring-zinc-900 resize-none transition-colors"
+              />
+              <button
+                onClick={() => handleReply(c.id)}
+                disabled={!(replyContent[c.id] ?? "").trim() || replySubmitting === c.id}
+                className="flex items-center justify-center w-7 h-7 rounded-xl bg-zinc-900 text-white hover:bg-zinc-700 transition-colors disabled:opacity-40 shrink-0"
+              >
+                {replySubmitting === c.id ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="w-3 h-3" />}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Comments section ──────────────────────────────────────────────────────────
+
+interface CommentsSectionProps {
+  token: string;
+  /** Pre-loaded bottom-section comments (anchorY === null). */
+  initialComments: BRDComment[];
+  onCommentAdded: (c: BRDComment) => void;
+}
+
+function CommentsSection({ token, initialComments, onCommentAdded }: CommentsSectionProps) {
+  const [localComments, setLocalComments] = useState<BRDComment[]>(initialComments);
+
+  // Session-based viewer name
+  const [viewerName, setViewerName] = useState<string>(() =>
+    typeof window !== "undefined" ? sessionStorage.getItem(`brd_viewer_name_${token}`) ?? "" : ""
+  );
+  const [nameInput, setNameInput] = useState(""); // editable only when no session name
+
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
   useEffect(() => {
-    const fetchComments = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments`);
-        if (res.ok) {
-          const json = await res.json();
-          setComments(json.data || []);
-        }
-      } catch { /* silent */ } finally {
-        setLoadingComments(false);
-      }
-    };
-    fetchComments();
-  }, [token]);
+    setLocalComments(initialComments);
+  }, [initialComments.length]); // eslint-disable-line
+
+  const comments = localComments;
+
+  const effectiveName = viewerName || nameInput.trim();
 
   const handleSubmit = async () => {
-    if (!name.trim() || !content.trim()) return;
+    if (!effectiveName || !content.trim()) return;
+    // If using a new name from input, store it for the session
+    if (!viewerName && nameInput.trim()) {
+      sessionStorage.setItem(`brd_viewer_name_${token}`, nameInput.trim());
+      setViewerName(nameInput.trim());
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -267,9 +428,9 @@ function CommentsSection({ token }: { token: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          commenter_name: name.trim(),
-          commenter_email: email.trim() || null,
+          commenter_name: effectiveName,
           content: content.trim(),
+          // no anchor_y = bottom section comment
         }),
       });
       const json = await res.json();
@@ -277,8 +438,9 @@ function CommentsSection({ token }: { token: string }) {
         setSubmitError(json.detail || "Failed to post comment");
         return;
       }
-      // Optimistic update
-      setComments((prev) => [...prev, json.data as BRDComment]);
+      const newComment = json.data as BRDComment;
+      setLocalComments((prev) => [...prev, newComment]);
+      onCommentAdded(newComment);
       setContent("");
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
@@ -302,31 +464,27 @@ function CommentsSection({ token }: { token: string }) {
 
         {/* Compose form */}
         <div className="bg-zinc-50 rounded-2xl border border-zinc-200 p-5 mb-8">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-4">Leave a comment</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs text-zinc-500 block mb-1">Name <span className="text-red-400">*</span></label>
+          {/* Show name field only if no session name */}
+          {viewerName ? (
+            <div className="flex items-center gap-2 text-xs text-zinc-500 mb-4">
+              <div className="w-5 h-5 rounded-full bg-zinc-900 flex items-center justify-center shrink-0">
+                <span className="text-white text-[9px] font-bold">{viewerName.charAt(0).toUpperCase()}</span>
+              </div>
+              Commenting as <span className="font-semibold text-zinc-800">{viewerName}</span>
+            </div>
+          ) : (
+            <div className="mb-4">
+              <label className="text-xs text-zinc-500 block mb-1">Your name <span className="text-red-400">*</span></label>
               <input
                 type="text"
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter your name"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
                 className="w-full border border-zinc-200 bg-white rounded-xl px-3 py-2.5 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-colors"
               />
             </div>
-            <div>
-              <label className="text-xs text-zinc-500 block mb-1">Email <span className="text-zinc-300">(optional)</span></label>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-zinc-200 bg-white rounded-xl px-3 py-2.5 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-colors"
-              />
-            </div>
-          </div>
+          )}
           <div className="mb-3">
-            <label className="text-xs text-zinc-500 block mb-1">Comment <span className="text-red-400">*</span></label>
             <textarea
               placeholder="Share your feedback or questions about this document..."
               value={content}
@@ -352,7 +510,7 @@ function CommentsSection({ token }: { token: string }) {
           <div className="flex justify-end">
             <button
               onClick={handleSubmit}
-              disabled={!name.trim() || !content.trim() || submitting}
+              disabled={!effectiveName || !content.trim() || submitting}
               className="flex items-center gap-2 bg-zinc-900 text-white text-sm font-semibold rounded-xl px-5 py-2.5 hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
@@ -365,40 +523,21 @@ function CommentsSection({ token }: { token: string }) {
           </div>
         </div>
 
-        {/* Comments list */}
-        {loadingComments ? (
-          <div className="flex justify-center py-8">
-            <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-600 rounded-full animate-spin" />
-          </div>
-        ) : comments.length === 0 ? (
+        {/* Comments list with replies + resolve */}
+        {comments.filter((c) => !c.parentId).length === 0 ? (
           <div className="text-center py-10">
             <MessageSquare className="w-8 h-8 text-zinc-200 mx-auto mb-3" />
             <p className="text-sm text-zinc-400">No comments yet. Be the first to leave feedback.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {comments.map((c) => (
-              <div key={c.id} className="bg-white border border-zinc-100 rounded-2xl p-5">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center shrink-0">
-                      <span className="text-white text-xs font-bold">
-                        {c.commenterName.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-900">{c.commenterName}</p>
-                      {c.commenterEmail && (
-                        <p className="text-xs text-zinc-400">{c.commenterEmail}</p>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-xs text-zinc-400 sm:shrink-0 pl-10 sm:pl-0">{formatRelative(c.createdAt)}</p>
-                </div>
-                <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap">{c.content}</p>
-              </div>
-            ))}
-          </div>
+          <BottomCommentThread
+            token={token}
+            topLevel={comments.filter((c) => !c.parentId)}
+            allComments={comments}
+            viewerName={viewerName || nameInput.trim()}
+            onCommentAdded={(c) => { setLocalComments((prev) => [...prev, c]); onCommentAdded(c); }}
+            onCommentUpdated={(c) => setLocalComments((prev) => prev.map((x) => x.id === c.id ? c : x))}
+          />
         )}
       </div>
     </section>
@@ -415,6 +554,10 @@ export default function SharedBRDPage() {
   const [notFound, setNotFound] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isGated, setIsGated] = useState(false);
+
+  // All comments — split into inline (anchorY set) and section (anchorY null)
+  const [allComments, setAllComments] = useState<BRDComment[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -459,6 +602,20 @@ export default function SharedBRDPage() {
       }
     };
     fetchAll();
+
+    // Load comments separately (non-blocking)
+    const fetchComments = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments`);
+        if (res.ok) {
+          const json = await res.json();
+          setAllComments(json.data || []);
+        }
+      } catch { /* silent */ } finally {
+        setCommentsLoaded(true);
+      }
+    };
+    fetchComments();
   }, [token]);
 
   useEffect(() => {
@@ -514,6 +671,30 @@ export default function SharedBRDPage() {
 
   const aiContent = brd.aiContent || {};
   const documentContent = aiContent["improved-brd.md"] || aiContent["brd.md"] || "";
+
+  // Top-level inline pins (have a position on the document)
+  const inlineTopLevel = allComments.filter((c) => c.anchorY != null && !c.parentId);
+  const inlineTopLevelIds = new Set(inlineTopLevel.map((c) => c.id));
+  // Replies to inline pins (no position, but parent is an inline pin)
+  const inlineReplies = allComments.filter((c) => c.parentId && inlineTopLevelIds.has(c.parentId));
+
+  // Top-level section comments (no position, no parent — bottom of page)
+  const sectionTopLevel = allComments.filter((c) => c.anchorY == null && !c.parentId);
+  const sectionTopLevelIds = new Set(sectionTopLevel.map((c) => c.id));
+  // Replies to section comments
+  const sectionReplies = allComments.filter((c) => c.parentId && sectionTopLevelIds.has(c.parentId));
+
+  const handleCommentAdded = (c: BRDComment) => {
+    setAllComments((prev) => [...prev, c]);
+  };
+
+  const handleCommentDeleted = (commentId: string) => {
+    setAllComments((prev) => prev.filter((c) => c.id !== commentId));
+  };
+
+  const handleCommentUpdated = (updated: BRDComment) => {
+    setAllComments((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+  };
 
   return (
     <div className="min-h-screen bg-white print:bg-white">
@@ -601,11 +782,19 @@ export default function SharedBRDPage() {
           </div>
         </div>
 
-        {/* Document body */}
+        {/* Document body — wrapped for inline comment pins */}
         {documentContent ? (
-          <div className="pb-12">
-            <BRDDocumentRenderer content={documentContent} />
-          </div>
+          <InlineCommentLayer
+            token={token}
+            comments={[...inlineTopLevel, ...inlineReplies]}
+            onCommentAdded={handleCommentAdded}
+            onCommentDeleted={handleCommentDeleted}
+            onCommentUpdated={handleCommentUpdated}
+          >
+            <div className="pb-12">
+              <BRDDocumentRenderer content={documentContent} />
+            </div>
+          </InlineCommentLayer>
         ) : (
           <div className="py-24 text-center">
             <BookText className="w-14 h-14 text-zinc-200 mx-auto mb-4" />
@@ -613,8 +802,12 @@ export default function SharedBRDPage() {
           </div>
         )}
 
-        {/* Comments section */}
-        <CommentsSection token={token} />
+        {/* Bottom comments section — general feedback (no anchor) */}
+        <CommentsSection
+          token={token}
+          initialComments={[...sectionTopLevel, ...sectionReplies]}
+          onCommentAdded={handleCommentAdded}
+        />
       </div>
 
       {/* Footer */}
