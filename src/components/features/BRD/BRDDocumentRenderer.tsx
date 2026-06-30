@@ -324,11 +324,6 @@ function TableOfContents({
                 {isActive && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-zinc-900 rounded-r-full" />
                 )}
-                {h.num !== null && (
-                  <span className={`shrink-0 text-[10px] font-bold tabular-nums mt-px ${isActive ? "text-zinc-400" : "text-zinc-300 group-hover:text-zinc-400"}`}>
-                    {String(h.num).padStart(2, "0")}
-                  </span>
-                )}
                 <span className={`text-[11px] leading-snug ${isActive ? "font-semibold" : ""}`}>
                   {h.text}
                 </span>
