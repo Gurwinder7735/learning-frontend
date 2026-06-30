@@ -81,6 +81,16 @@ function extractHeadingsFromMarkdown(markdown: string): Heading[] {
   return headings;
 }
 
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
 /** Extract H2/H3 headings from HTML and inject id attributes for TOC anchors. */
 function extractHeadingsFromHtml(html: string): { headings: Heading[]; processedHtml: string } {
   const headings: Heading[] = [];
@@ -91,8 +101,8 @@ function extractHeadingsFromHtml(html: string): { headings: Heading[]; processed
     /<(h[23])([^>]*)>([\s\S]*?)<\/h[23]>/gi,
     (_match, tag, attrs, inner) => {
       const level = tag === "h2" ? 2 : 3;
-      // Strip existing HTML tags from the inner text to get plain text
-      const text = inner.replace(/<[^>]+>/g, "").trim();
+      // Strip tags and decode HTML entities to get plain text
+      const text = decodeEntities(inner.replace(/<[^>]+>/g, "").trim());
       const base = slugify(text);
       const n = seen.get(base) || 0;
       seen.set(base, n + 1);
@@ -153,7 +163,7 @@ const H1 = (props: React.ComponentPropsWithoutRef<"h1">) => {
     React.Children.toArray(props.children).map(c => typeof c === "string" ? c : "").join("").replace(/[*`]/g, "").trim()
   );
   return (
-    <h1 id={id} className="text-2xl font-bold text-zinc-900 mt-10 mb-4 pb-3 border-b-2 border-zinc-900 scroll-mt-20">
+    <h1 id={id} className="text-[1.6rem] font-bold text-zinc-900 mt-12 mb-5 leading-tight scroll-mt-20 tracking-tight">
       {props.children}
     </h1>
   );
@@ -164,8 +174,7 @@ const H2 = (props: React.ComponentPropsWithoutRef<"h2">) => {
     React.Children.toArray(props.children).map(c => typeof c === "string" ? c : "").join("").replace(/[*`]/g, "").trim()
   );
   return (
-    <h2 id={id} className="flex items-center gap-3 text-xl font-bold text-zinc-900 mt-12 mb-4 scroll-mt-20">
-      <span className="w-1 h-6 rounded-full bg-zinc-800 shrink-0" />
+    <h2 id={id} className="text-lg font-bold text-zinc-900 mt-14 mb-4 scroll-mt-20 pb-3 border-b border-zinc-100">
       {props.children}
     </h2>
   );
@@ -176,84 +185,78 @@ const H3 = (props: React.ComponentPropsWithoutRef<"h3">) => {
     React.Children.toArray(props.children).map(c => typeof c === "string" ? c : "").join("").replace(/[*`]/g, "").trim()
   );
   return (
-    <h3 id={id} className="text-base font-semibold text-zinc-800 mt-8 mb-3 scroll-mt-20">
+    <h3 id={id} className="text-[0.95rem] font-semibold text-zinc-800 mt-8 mb-3 scroll-mt-20">
       {props.children}
     </h3>
   );
 };
 
 const H4 = (props: React.ComponentPropsWithoutRef<"h4">) => (
-  <h4 className="text-sm font-semibold text-zinc-600 mt-6 mb-2 uppercase tracking-wide">
+  <h4 className="text-xs font-bold text-zinc-500 mt-6 mb-2 uppercase tracking-widest">
     {props.children}
   </h4>
 );
 
 function Table(props: React.ComponentPropsWithoutRef<"table">) {
   return (
-    <div className="overflow-x-auto my-6 rounded-xl border border-zinc-200 shadow-sm">
-      <table className="min-w-full text-sm" {...props} />
+    <div className="overflow-x-auto my-6 rounded-xl border border-zinc-200/80">
+      <table className="min-w-full text-[13px]" {...props} />
     </div>
   );
 }
 
 function Th(props: React.ComponentPropsWithoutRef<"th">) {
   return (
-    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-zinc-600 bg-zinc-900/5 border-b border-zinc-200 whitespace-nowrap" {...props} />
+    <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500 bg-zinc-50 border-b border-zinc-200 whitespace-nowrap" {...props} />
   );
 }
 
 function Td(props: React.ComponentPropsWithoutRef<"td">) {
   return (
-    <td className="px-4 py-3 text-zinc-700 border-t border-zinc-100 align-top leading-relaxed" {...props} />
+    <td className="px-4 py-3 text-zinc-700 border-t border-zinc-100 align-top leading-relaxed text-[13px]" {...props} />
   );
 }
 
 function Tr(props: React.ComponentPropsWithoutRef<"tr">) {
-  return <tr className="even:bg-zinc-50/60 hover:bg-blue-50/30 transition-colors" {...props} />;
+  return <tr className="even:bg-zinc-50/40 hover:bg-sky-50/40 transition-colors" {...props} />;
 }
 
 function BlockQuote(props: React.ComponentPropsWithoutRef<"blockquote">) {
   return (
-    <blockquote className="border-l-4 border-zinc-800 bg-zinc-50 rounded-r-xl px-5 py-4 my-5 text-zinc-700 not-italic" {...props} />
+    <blockquote className="border-l-[3px] border-zinc-300 pl-5 pr-2 py-1 my-5 text-zinc-600 not-italic text-[14px] leading-relaxed" {...props} />
   );
 }
 
 function CodeBlock(props: React.ComponentPropsWithoutRef<"code">) {
   if (!props.className) {
-    return <code className="bg-zinc-100 text-zinc-800 px-1.5 py-0.5 rounded text-[0.85em] font-mono border border-zinc-200" {...props} />;
+    return <code className="bg-zinc-100 text-zinc-800 px-1.5 py-0.5 rounded text-[0.82em] font-mono border border-zinc-200/80" {...props} />;
   }
   return (
-    <div className="my-5 rounded-xl overflow-hidden border border-zinc-200">
-      <pre className="bg-zinc-950 p-5 overflow-x-auto text-sm leading-relaxed">
-        <code className="text-zinc-100 font-mono" {...props} />
+    <div className="my-5 rounded-xl overflow-hidden">
+      <pre className="bg-zinc-950 px-5 py-4 overflow-x-auto text-sm leading-relaxed">
+        <code className="text-zinc-200 font-mono" {...props} />
       </pre>
     </div>
   );
 }
 
 const Ol = (props: React.ComponentPropsWithoutRef<"ol">) => (
-  <ol className="my-4 pl-6 space-y-2 list-decimal marker:text-zinc-500 marker:font-semibold" {...props} />
+  <ol className="my-3 pl-6 space-y-1.5 list-decimal marker:text-zinc-400 marker:text-[13px]" {...props} />
 );
 const Ul = (props: React.ComponentPropsWithoutRef<"ul">) => (
-  <ul className="my-4 pl-6 space-y-2 list-disc marker:text-zinc-400" {...props} />
+  <ul className="my-3 pl-6 space-y-1.5 list-disc marker:text-zinc-300" {...props} />
 );
 const Li = (props: React.ComponentPropsWithoutRef<"li">) => (
-  <li className="text-zinc-700 leading-relaxed" {...props} />
+  <li className="text-zinc-700 leading-relaxed text-[14px]" {...props} />
 );
 const P = (props: React.ComponentPropsWithoutRef<"p">) => (
-  <p className="text-zinc-700 leading-[1.8] my-4 text-[15px]" {...props} />
+  <p className="text-zinc-700 leading-[1.85] my-3.5 text-[14px]" {...props} />
 );
 const Strong = (props: React.ComponentPropsWithoutRef<"strong">) => (
   <strong className="font-semibold text-zinc-900" {...props} />
 );
 function Hr() {
-  return (
-    <div className="my-10 flex items-center gap-4">
-      <div className="flex-1 h-px bg-zinc-200" />
-      <div className="w-1.5 h-1.5 rounded-full bg-zinc-300" />
-      <div className="flex-1 h-px bg-zinc-200" />
-    </div>
-  );
+  return <div className="my-12 h-px bg-zinc-100" />;
 }
 
 const components: Components = {
@@ -274,29 +277,61 @@ function TableOfContents({
   activeId: string;
   onItemClick: (id: string) => void;
 }) {
+  const navRef = React.useRef<HTMLElement>(null);
+
+  // Scroll the active TOC item into the sidebar's visible area
+  useEffect(() => {
+    if (!navRef.current || !activeId) return;
+    const el = navRef.current.querySelector(`[data-toc-id="${activeId}"]`);
+    if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeId]);
+
   if (headings.length === 0) return null;
 
+  // Assign sequential numbers to H2 headings only
+  let h2Counter = 0;
+  const numbered = headings.map((h) => ({
+    ...h,
+    num: h.level === 2 ? ++h2Counter : null,
+  }));
+
   return (
-    <nav aria-label="Table of contents">
-      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400 mb-3 px-2">
-        Contents
-      </p>
-      <ul className="space-y-0.5">
-        {headings.map((h) => {
+    <nav ref={navRef} aria-label="Table of contents">
+      <div className="flex items-center gap-2 mb-4 px-1">
+        <div className="flex-1 h-px bg-zinc-200" />
+        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-400">
+          Contents
+        </p>
+        <div className="flex-1 h-px bg-zinc-200" />
+      </div>
+      <ul className="space-y-px">
+        {numbered.map((h) => {
           const isActive = activeId === h.id;
           return (
             <li key={h.id}>
               <button
+                data-toc-id={h.id}
                 onClick={() => onItemClick(h.id)}
-                className={`w-full text-left text-xs leading-snug rounded-lg px-2 py-1.5 transition-all cursor-pointer ${
-                  h.level === 3 ? "pl-5" : ""
+                className={`group w-full text-left flex items-start gap-2 rounded-lg py-2 pr-2 transition-all duration-150 cursor-pointer relative ${
+                  h.level === 3 ? "pl-6" : "pl-2"
                 } ${
                   isActive
-                    ? "bg-zinc-900 text-white font-semibold"
-                    : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                    ? "text-zinc-900"
+                    : "text-zinc-400 hover:text-zinc-700"
                 }`}
               >
-                {h.text}
+                {/* Active accent bar */}
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-zinc-900 rounded-r-full" />
+                )}
+                {h.num !== null && (
+                  <span className={`shrink-0 text-[10px] font-bold tabular-nums mt-px ${isActive ? "text-zinc-400" : "text-zinc-300 group-hover:text-zinc-400"}`}>
+                    {String(h.num).padStart(2, "0")}
+                  </span>
+                )}
+                <span className={`text-[11px] leading-snug ${isActive ? "font-semibold" : ""}`}>
+                  {h.text}
+                </span>
               </button>
             </li>
           );
@@ -414,40 +449,51 @@ export function BRDDocumentRenderer({ content }: Props) {
     scrollToId(id);
   };
 
-  // Track which section is in view (only when the user is scrolling manually).
+  // Track active section on scroll — finds the heading closest to (but above)
+  // the top of the viewport. Works for both Markdown and HTML content.
   useEffect(() => {
     if (headings.length === 0) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (scrollingRef.current) return; // ignore during click-scroll
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible.length > 0) setActiveId(visible[0].target.id);
-      },
-      { rootMargin: "-60px 0px -50% 0px", threshold: 0 }
-    );
+    const headerH = 80; // approximate sticky header height
 
-    const timer = setTimeout(() => {
-      headings.forEach(({ id }) => {
-        const el = document.getElementById(id);
-        if (el) observer.observe(el);
-      });
-    }, 100);
+    const getActiveId = (): string => {
+      // Walk headings from bottom to top; first one whose top <= headerH + 8 wins
+      for (let i = headings.length - 1; i >= 0; i--) {
+        const el = document.getElementById(headings[i].id);
+        if (el) {
+          const top = el.getBoundingClientRect().top;
+          if (top <= headerH + 8) return headings[i].id;
+        }
+      }
+      return headings[0]?.id ?? "";
+    };
+
+    const onScroll = () => {
+      if (scrollingRef.current) return; // suppress during click-scroll
+      const id = getActiveId();
+      if (id) setActiveId(id);
+    };
+
+    // Small delay on mount so DOM is settled before first read
+    const init = setTimeout(() => {
+      const id = getActiveId();
+      if (id) setActiveId(id);
+    }, 150);
+
+    window.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
-      clearTimeout(timer);
-      observer.disconnect();
+      clearTimeout(init);
+      window.removeEventListener("scroll", onScroll);
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     };
-  }, [content]); // eslint-disable-line
+  }, [content, headings.length]); // eslint-disable-line
 
   return (
     <>
       <div className="flex gap-10 items-start">
         {/* Sidebar TOC — desktop only (lg+). sticky must be on the flex child itself. */}
-        <aside className="hidden lg:block w-52 shrink-0 sticky top-20 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto">
+        <aside className="hidden lg:block w-52 shrink-0 sticky top-20 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto brd-toc-sidebar">
           <TableOfContents headings={headings} activeId={activeId} onItemClick={handleTocClick} />
         </aside>
 
