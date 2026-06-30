@@ -493,7 +493,7 @@ export function BRDDocumentRenderer({ content }: Props) {
     <>
       <div className="flex gap-10 items-start">
         {/* Sidebar TOC — desktop only (lg+). sticky must be on the flex child itself. */}
-        <aside className="hidden lg:block w-52 shrink-0 sticky top-20 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto brd-toc-sidebar">
+        <aside data-no-comment="true" className="hidden lg:block w-52 shrink-0 sticky top-20 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto brd-toc-sidebar">
           <TableOfContents headings={headings} activeId={activeId} onItemClick={handleTocClick} />
         </aside>
 
