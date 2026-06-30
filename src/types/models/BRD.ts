@@ -37,9 +37,27 @@ export interface BRD {
   aiContent?: Record<string, string> | null;
   documentIds: string[];
   isPasswordProtected?: boolean;
+  preparedBy?: string | null;
+  documentDate?: string | null;
+  documentVersion?: string | null;
+  publishedVersionId?: string | null;
+  publishedVersionLabel?: string;   // e.g. "1.2"; empty = never published
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BRDVersion {
+  id: string;
+  brdId: string;
+  major: number;
+  minor: number;
+  label: string;              // "1.0", "1.1", "2.0"
+  content: Record<string, string>;
+  coverMetadata: Record<string, string>;
+  publishedBy: string;
+  note?: string | null;
+  publishedAt: string;
 }
 
 export interface BRDComment {
