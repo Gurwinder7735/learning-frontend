@@ -207,6 +207,7 @@ export default function AgreementSignPage() {
         if (data.isPasswordProtected && !data.content) {
           setIsPasswordGate(true);
           setAgreement(data);
+          document.title = data.name ?? "Protected Document";
         } else {
           await initAgreement(data);
         }
@@ -222,6 +223,10 @@ export default function AgreementSignPage() {
 
   const initAgreement = async (data: Agreement) => {
     setAgreement(data);
+    // Dynamic page title
+    const titleParts = [data.name];
+    if (data.clientName) titleParts.push(data.clientName);
+    document.title = titleParts.join(" — ");
     const existingClientSig = data.signatures?.find((s) => s.role === "client");
     if (existingClientSig) {
       setSignedAs(existingClientSig.signerName);
