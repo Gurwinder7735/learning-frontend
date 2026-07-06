@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const protectedPaths = ["/clients", "/documents", "/meetings", "/legal", "/finance", "/knowledge", "/users", "/brd"];
-const publicSharePaths = ["/proposals/share", "/brd/share"];
+const protectedPaths = ["/clients", "/documents", "/meetings", "/legal", "/finance", "/knowledge", "/users", "/brd", "/agreements"];
+const publicSharePaths = ["/proposals/share", "/brd/share", "/agreements/sign"];
 const authPaths = ["/login", "/register"];
 
 export function middleware(request: NextRequest) {

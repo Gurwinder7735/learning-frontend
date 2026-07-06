@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button, Input, Select, Typography, Spin, message, Slider, Upload } from "antd";
-import { Save, Calendar, CheckCircle, XCircle, DollarSign, Zap, PlugZap, Palette, UploadCloud, X } from "lucide-react";
+import { Save, Calendar, CheckCircle, XCircle, DollarSign, Zap, PlugZap, Palette, UploadCloud, X, PenLine } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { storage } from "@/lib/utils/storage";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
@@ -28,6 +28,9 @@ interface Branding {
   companyName: string;
   tagline: string;
   logoPath: string | null;
+  officialSignatoryName: string;
+  officialSignatoryTitle: string;
+  officialSignatoryEmail: string;
 }
 
 const NAV_ITEMS = [
@@ -35,6 +38,7 @@ const NAV_ITEMS = [
   { key: "pricing", icon: DollarSign, label: "Pricing" },
   { key: "ai-efficiency", icon: Zap, label: "AI Efficiency" },
   { key: "branding", icon: Palette, label: "Branding" },
+  { key: "signatory", icon: PenLine, label: "Signatory" },
 ];
 
 export default function SettingsPage() {
@@ -49,7 +53,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("integrations");
 
   // Branding state
-  const [branding, setBranding] = useState<Branding>({ companyName: "", tagline: "", logoPath: null });
+  const [branding, setBranding] = useState<Branding>({ companyName: "", tagline: "", logoPath: null, officialSignatoryName: "", officialSignatoryTitle: "", officialSignatoryEmail: "" });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [savingBranding, setSavingBranding] = useState(false);
@@ -78,6 +82,9 @@ export default function SettingsPage() {
             companyName: d.companyName || "",
             tagline: d.tagline || "",
             logoPath: d.logoPath || null,
+            officialSignatoryName: d.officialSignatoryName || "",
+            officialSignatoryTitle: d.officialSignatoryTitle || "",
+            officialSignatoryEmail: d.officialSignatoryEmail || "",
           });
         }
       } catch {
@@ -155,6 +162,9 @@ export default function SettingsPage() {
         body: JSON.stringify({
           company_name: branding.companyName,
           tagline: branding.tagline || null,
+          official_signatory_name: branding.officialSignatoryName || null,
+          official_signatory_title: branding.officialSignatoryTitle || null,
+          official_signatory_email: branding.officialSignatoryEmail || null,
         }),
       });
       if (!textRes.ok) throw new Error("Failed to save branding");
@@ -484,15 +494,65 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {activeTab === "signatory" && (
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <PenLine className="w-5 h-5 text-zinc-500" />
+                <h3 className="text-base font-semibold text-zinc-800 m-0">Official Signatory</h3>
+              </div>
+              <p className="text-sm text-zinc-400 mt-1 mb-6">
+                These details appear on signed agreements and legal documents instead of the logged-in user's name.
+              </p>
+              <div className="space-y-5 max-w-md">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-1">Full Legal Name</label>
+                  <Input
+                    value={branding.officialSignatoryName}
+                    onChange={(e) => setBranding((b) => ({ ...b, officialSignatoryName: e.target.value }))}
+                    placeholder="e.g. Gurwinder Singh"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-1">Official Title / Designation</label>
+                  <Input
+                    value={branding.officialSignatoryTitle}
+                    onChange={(e) => setBranding((b) => ({ ...b, officialSignatoryTitle: e.target.value }))}
+                    placeholder="e.g. Director, CEO, Managing Partner"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-1">Official Email</label>
+                  <Input
+                    type="email"
+                    value={branding.officialSignatoryEmail}
+                    onChange={(e) => setBranding((b) => ({ ...b, officialSignatoryEmail: e.target.value }))}
+                    placeholder="e.g. director@company.com"
+                  />
+                </div>
+                {(branding.officialSignatoryName || branding.officialSignatoryTitle) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Preview on Certificate</p>
+                    <p className="text-base text-amber-900" style={{ fontFamily: "'Brush Script MT', cursive" }}>
+                      {branding.officialSignatoryName || "Name"}
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      {[branding.officialSignatoryTitle, branding.officialSignatoryEmail].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end mt-8 pt-6 border-t border-zinc-100">
-            {activeTab === "branding" ? (
+            {(activeTab === "branding" || activeTab === "signatory") ? (
               <Button
                 type="primary"
                 icon={<Save className="w-4 h-4" />}
                 loading={savingBranding}
                 onClick={handleSaveBranding}
               >
-                Save Branding
+                {activeTab === "signatory" ? "Save Signatory" : "Save Branding"}
               </Button>
             ) : (
               <Button type="primary" icon={<Save className="w-4 h-4" />} loading={saving} onClick={handleSave}>

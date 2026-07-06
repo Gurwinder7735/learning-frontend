@@ -11,6 +11,7 @@ export const APP_ROUTES = {
   knowledge: "/knowledge",
   intelligence: "/intelligence",
   brd: "/brd",
+  agreements: "/agreements",
   leads: "/leads",
   roles: "/roles",
   users: "/users",
