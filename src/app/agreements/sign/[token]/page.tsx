@@ -306,7 +306,7 @@ export default function AgreementSignPage() {
   // Shared branded header used in both review and signing views
   const BrandedHeader = (
     <header className="bg-white border-b border-zinc-100 sticky top-0 z-10">
-      <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+      <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {branding?.logoPath ? (
             <img
@@ -348,7 +348,7 @@ export default function AgreementSignPage() {
     return (
       <div className="min-h-screen bg-zinc-50">
         {BrandedHeader}
-        <div className="max-w-4xl mx-auto px-6 py-10">
+        <div className="max-w-6xl mx-auto px-6 py-10">
           {/* Review notice */}
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-8 flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
@@ -380,7 +380,7 @@ export default function AgreementSignPage() {
           )}
 
           <footer className="border-t border-zinc-100 mt-4 print:hidden">
-            <div className="max-w-4xl mx-auto py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div className="max-w-6xl mx-auto py-4 flex items-center justify-between gap-4 flex-wrap">
               <p className="text-xs text-zinc-300">
                 {branding?.companyName ? `${branding.companyName} · ` : ""}Review copy — not for signature
               </p>
@@ -396,7 +396,7 @@ export default function AgreementSignPage() {
       {/* Header */}
       {BrandedHeader}
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
+      <div className="max-w-6xl mx-auto px-6 py-10">
         {/* Cover */}
         <div className="mb-8">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400 mb-2">Document for Signature</p>
@@ -524,7 +524,7 @@ export default function AgreementSignPage() {
       </div>
 
       <footer className="border-t border-zinc-100 mt-4 print:hidden">
-        <div className="max-w-4xl mx-auto px-6 py-4 text-center">
+        <div className="max-w-6xl mx-auto px-6 py-4 text-center">
           <p className="text-xs text-zinc-300">
             {branding?.companyName ? `${branding.companyName} · ` : ""}Legally binding electronic signature
           </p>

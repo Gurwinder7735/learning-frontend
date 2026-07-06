@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Modal, Select, message, Tooltip } from "antd";
+import { Button, Drawer, Input, Modal, Select, message, Tooltip } from "antd";
 import {
   FilePen,
   Plus,
@@ -14,6 +14,7 @@ import {
   Loader2,
   Lock,
   Globe,
+  Sparkles,
   Trash2,
   FileText,
 } from "lucide-react";
@@ -150,6 +151,22 @@ export default function AgreementsPage() {
   const [newPartyRole, setNewPartyRole] = useState("Client");
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
+  // AI Generate modal
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genForm, setGenForm] = useState({
+    agreementType: "Service Agreement",
+    party1Name: "",
+    party1Role: "Service Provider",
+    party2Name: "",
+    party2Role: "Client",
+    jurisdiction: "",
+    effectiveDate: "",
+    term: "",
+    subjectMatter: "",
+    specialClauses: "",
+  });
+
   useEffect(() => {
     dispatch(fetchAgreementsRequest());
   }, [dispatch]);
@@ -206,6 +223,46 @@ export default function AgreementsPage() {
     setNewName("");
     setNewPartyRole("Client");
     setCreateModalOpen(true);
+  };
+
+  const handleGenerate = async () => {
+    if (!genForm.party1Name.trim() || !genForm.party2Name.trim() || !genForm.subjectMatter.trim() || !genForm.jurisdiction.trim()) {
+      message.warning("Please fill in Party 1, Party 2, Jurisdiction, and Subject Matter.");
+      return;
+    }
+    if (generating) return;
+    setGenerating(true);
+    try {
+      const token = storage.getAccessToken();
+      const res = await fetch(`${API_BASE_URL}/api/v1/agreements/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          agreement_type: genForm.agreementType,
+          party1_name: genForm.party1Name,
+          party1_role: genForm.party1Role,
+          party2_name: genForm.party2Name,
+          party2_role: genForm.party2Role,
+          jurisdiction: genForm.jurisdiction,
+          effective_date: genForm.effectiveDate,
+          term: genForm.term,
+          subject_matter: genForm.subjectMatter,
+          special_clauses: genForm.specialClauses,
+          external_party_role: genForm.party2Role,  // same as party 2 role
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setGenerateModalOpen(false);
+      router.push(`${APP_ROUTES.agreements}/${json.data.agreementId}?generating=true&jobId=${json.data.jobId}`);
+    } catch {
+      message.error("Failed to start generation");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const signedCount = agreements.filter((a) => a.status === "fully_signed").length;
@@ -286,6 +343,13 @@ export default function AgreementsPage() {
           )}
           <div className="flex-1" />
           <Button
+            icon={<Sparkles className="w-4 h-4" />}
+            onClick={() => setGenerateModalOpen(true)}
+            className="border-purple-200 text-purple-700 hover:border-purple-400"
+          >
+            Generate with AI
+          </Button>
+          <Button
             type="primary"
             icon={<Plus className="w-4 h-4" />}
             onClick={showCreateModal}
@@ -309,15 +373,25 @@ export default function AgreementsPage() {
           <p className="text-sm text-zinc-400 mb-6 max-w-sm">
             Create a document in CKEditor, send it to your client for signing, and both parties sign electronically.
           </p>
-          <Button
-            type="primary"
-            size="large"
-            icon={<Plus className="w-4 h-4" />}
-            onClick={showCreateModal}
-            className="!bg-zinc-900"
-          >
-            Create your first agreement
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              size="large"
+              icon={<Sparkles className="w-4 h-4" />}
+              onClick={() => setGenerateModalOpen(true)}
+              className="border-purple-200 text-purple-700 hover:border-purple-400"
+            >
+              Generate with AI
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              icon={<Plus className="w-4 h-4" />}
+              onClick={showCreateModal}
+              className="!bg-zinc-900"
+            >
+              Create manually
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -326,6 +400,149 @@ export default function AgreementsPage() {
           ))}
         </div>
       )}
+
+      {/* Generate with AI — Side Sheet */}
+      <Drawer
+        open={generateModalOpen}
+        onClose={() => setGenerateModalOpen(false)}
+        title={
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-600" />
+            <span className="font-semibold text-zinc-900">Generate Agreement with AI</span>
+          </div>
+        }
+        width={480}
+        placement="right"
+        destroyOnClose
+        footer={
+          <div className="flex items-center gap-3 justify-end">
+            <Button onClick={() => setGenerateModalOpen(false)}>Cancel</Button>
+            <Button
+              type="primary"
+              loading={generating}
+              onClick={handleGenerate}
+              className="!bg-purple-600 hover:!bg-purple-700 !border-purple-600"
+            >
+              Generate Agreement
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          <p className="text-xs text-zinc-500 bg-purple-50 border border-purple-100 rounded-xl px-4 py-3 leading-relaxed">
+            Our AI runs a 6-agent legal pipeline to produce a professionally drafted, legally structured agreement. You can review and edit the result before sending for signing.
+          </p>
+
+          {/* Agreement type */}
+          <div>
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide block mb-1.5">Agreement Type</label>
+            <Select
+              value={genForm.agreementType}
+              onChange={(v) => setGenForm((f) => ({ ...f, agreementType: v }))}
+              className="w-full"
+              options={[
+                "Non-Disclosure Agreement (NDA)",
+                "Service Agreement",
+                "Partnership Agreement",
+                "Employment Agreement",
+                "Vendor Agreement",
+                "Consulting Agreement",
+                "Software License Agreement",
+                "Distribution Agreement",
+                "Joint Venture Agreement",
+              ].map((t) => ({ label: t, value: t }))}
+            />
+          </div>
+
+          {/* Parties */}
+          <div className="border-t border-zinc-100 pt-4">
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Parties</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-500 block mb-1">Party 1 Name</label>
+                  <Input
+                    placeholder="e.g. Appmotiv Ltd"
+                    value={genForm.party1Name}
+                    onChange={(e) => setGenForm((f) => ({ ...f, party1Name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-zinc-500 block mb-1">Role</label>
+                  <Input
+                    placeholder="e.g. Service Provider"
+                    value={genForm.party1Role}
+                    onChange={(e) => setGenForm((f) => ({ ...f, party1Role: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-500 block mb-1">Party 2 Name</label>
+                  <Input
+                    placeholder="e.g. Acme Corp"
+                    value={genForm.party2Name}
+                    onChange={(e) => setGenForm((f) => ({ ...f, party2Name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-zinc-500 block mb-1">Role</label>
+                  <Input
+                    placeholder="e.g. Client"
+                    value={genForm.party2Role}
+                    onChange={(e) => setGenForm((f) => ({ ...f, party2Role: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Agreement details */}
+          <div className="border-t border-zinc-100 pt-4">
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Agreement Details</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-500 block mb-1">Jurisdiction / Governing Law <span className="text-red-400">*</span></label>
+                  <Input
+                    placeholder="e.g. England & Wales"
+                    value={genForm.jurisdiction}
+                    onChange={(e) => setGenForm((f) => ({ ...f, jurisdiction: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-zinc-500 block mb-1">Term / Duration</label>
+                  <Input
+                    placeholder="e.g. 12 months"
+                    value={genForm.term}
+                    onChange={(e) => setGenForm((f) => ({ ...f, term: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-500 block mb-1">Subject Matter / Purpose <span className="text-red-400">*</span></label>
+                <Input.TextArea
+                  placeholder="Describe what this agreement covers — services, products, IP, collaboration scope, etc."
+                  value={genForm.subjectMatter}
+                  onChange={(e) => setGenForm((f) => ({ ...f, subjectMatter: e.target.value }))}
+                  rows={5}
+                  className="resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-500 block mb-1">Special Clauses / Notes <span className="text-zinc-400 font-normal">(optional)</span></label>
+                <Input.TextArea
+                  placeholder="Any specific terms, restrictions, payment amounts, or requirements to include..."
+                  value={genForm.specialClauses}
+                  onChange={(e) => setGenForm((f) => ({ ...f, specialClauses: e.target.value }))}
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 }
