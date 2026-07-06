@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Input, Modal, Select, Spin, Tag, Typography, message, Tooltip } from "antd";
+import { Button, Input, Modal, Select, Spin, Typography, message, Tooltip } from "antd";
 import {
   ArrowLeft,
   Building2,
@@ -19,6 +19,7 @@ import {
   Save,
   Send,
   Shield,
+  Sparkles,
   Trash2,
   X,
   AlertTriangle,
@@ -59,6 +60,19 @@ const signingStatusLabel: Record<string, string> = {
   declined: "Declined",
 };
 
+// ─── Agent step types for streaming UI ───────────────────────────────────────
+
+const AGENT_LABELS: Record<string, string> = {
+  party_context: "Party & Context Analyst",
+  obligations_rights: "Obligations & Rights Analyst",
+  commercial_terms: "Commercial Terms Analyst",
+  legal_compliance: "Legal & Compliance Analyst",
+  composer: "Agreement Composer",
+  reviewer: "Agreement Reviewer",
+};
+
+const AGENT_ORDER = ["party_context", "obligations_rights", "commercial_terms", "legal_compliance", "composer", "reviewer"];
+
 export default function AgreementDetailPage() {
   const { agreementId } = useParams() as { agreementId: string };
   const dispatch = useAppDispatch();
@@ -79,6 +93,14 @@ export default function AgreementDetailPage() {
 
   const [officialSignatory, setOfficialSignatory] = useState<{ name?: string; title?: string; email?: string } | null>(null);
 
+  // AI generation streaming
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationDone, setGenerationDone] = useState(false);
+  const [currentAgent, setCurrentAgent] = useState<string | null>(null);
+  const [completedAgents, setCompletedAgents] = useState<string[]>([]);
+  const [agentTokens, setAgentTokens] = useState<Record<string, string>>({});
+  const esRef = useRef<EventSource | null>(null);
+
   // Password
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -98,7 +120,58 @@ export default function AgreementDetailPage() {
         }
       })
       .catch(() => {});
-  }, [agreementId, dispatch]);
+
+    // Start SSE stream if ?generating=true&jobId=xxx (read from window.location to avoid Suspense requirement)
+    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const jobId = urlParams?.get("jobId");
+    if (urlParams?.get("generating") === "true" && jobId) {
+      const token = storage.getAccessToken();
+      const url = `${API_BASE_URL}/api/v1/agreements/jobs/${jobId}/stream${token ? `?token=${token}` : ""}`;
+      setIsGenerating(true);
+      const es = new EventSource(url);
+      esRef.current = es;
+
+      es.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          const { type, data } = payload;
+
+          if (type === "agent_start") {
+            setCurrentAgent(data.agentName);
+          } else if (type === "agent_token") {
+            setAgentTokens((prev) => ({
+              ...prev,
+              [data.agentName]: (prev[data.agentName] || "") + data.token,
+            }));
+          } else if (type === "agent_complete") {
+            setCompletedAgents((prev) => [...prev, data.agentName]);
+            setCurrentAgent(null);
+          } else if (type === "done") {
+            es.close();
+            setIsGenerating(false);
+            setGenerationDone(true);
+            setCurrentAgent(null);
+            // Reload the agreement to get the generated content
+            dispatch(fetchAgreementDetailRequest(agreementId));
+            message.success("Agreement generated successfully!");
+            // Remove query params
+            router.replace(`${APP_ROUTES.agreements}/${agreementId}`);
+          } else if (type === "error") {
+            es.close();
+            setIsGenerating(false);
+            message.error("Generation failed: " + (data.message || "Unknown error"));
+          }
+        } catch { /* ignore parse errors */ }
+      };
+
+      es.onerror = () => {
+        es.close();
+        setIsGenerating(false);
+      };
+
+      return () => { es.close(); };
+    }
+  }, [agreementId, dispatch]); // eslint-disable-line
 
   useEffect(() => {
     if (agreement) {
@@ -319,6 +392,66 @@ export default function AgreementDetailPage() {
   const canInternalSign = isSent && agreement.signingStatus === "awaiting_internal";
   const isLocked = agreement.isLocked;
 
+  // ── Generation overlay ────────────────────────────────────────────────────
+  if (isGenerating || (generationDone && !agreement?.content)) {
+    return (
+      <div className="max-w-3xl mx-auto py-12">
+        <div className="mb-6">
+          <Link href={APP_ROUTES.agreements} className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Agreements
+          </Link>
+        </div>
+        <div className="bg-white border border-zinc-200 rounded-2xl p-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-zinc-900">Generating Agreement</h2>
+              <p className="text-xs text-zinc-500">Our AI legal pipeline is drafting your agreement...</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {AGENT_ORDER.map((agentName) => {
+              const label = AGENT_LABELS[agentName] || agentName;
+              const isDone = completedAgents.includes(agentName);
+              const isActive = currentAgent === agentName;
+              const tokenCount = agentTokens[agentName]?.length || 0;
+
+              return (
+                <div key={agentName} className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all ${isDone ? "bg-emerald-50 border-emerald-200" : isActive ? "bg-purple-50 border-purple-200" : "bg-zinc-50 border-zinc-100"}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isDone ? "bg-emerald-100" : isActive ? "bg-purple-100" : "bg-zinc-200"}`}>
+                    {isDone ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : isActive ? (
+                      <div className="w-3 h-3 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-zinc-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-semibold ${isDone ? "text-emerald-800" : isActive ? "text-purple-800" : "text-zinc-500"}`}>{label}</p>
+                    {isActive && tokenCount > 0 && (
+                      <p className="text-[10px] text-purple-500 mt-0.5">{tokenCount.toLocaleString()} characters generated...</p>
+                    )}
+                    {isDone && (
+                      <p className="text-[10px] text-emerald-600 mt-0.5">Complete — {(agentTokens[agentName]?.length || 0).toLocaleString()} characters</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {generationDone && (
+            <div className="mt-6 flex items-center gap-2 text-sm text-emerald-700 font-medium">
+              <CheckCircle2 className="w-4 h-4" /> Agreement generated — loading content...
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Back */}
@@ -344,15 +477,25 @@ export default function AgreementDetailPage() {
           )}
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
             {isReview && (
-              <Tag color="warning" className="!rounded-full shrink-0">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 shrink-0">
                 Under Review
-              </Tag>
+              </span>
             )}
-            {!isReview && (
-              <Tag color={signingStatusColor[agreement.signingStatus] || "default"} className="!rounded-full shrink-0">
-                {signingStatusLabel[agreement.signingStatus] || agreement.signingStatus}
-              </Tag>
-            )}
+            {!isReview && (() => {
+              const statusStyles: Record<string, string> = {
+                not_sent: "text-zinc-500 bg-zinc-100 border-zinc-200",
+                awaiting_client: "text-blue-700 bg-blue-50 border-blue-200",
+                awaiting_internal: "text-purple-700 bg-purple-50 border-purple-200",
+                partially_signed: "text-orange-700 bg-orange-50 border-orange-200",
+                fully_signed: "text-emerald-700 bg-emerald-50 border-emerald-200",
+                declined: "text-red-600 bg-red-50 border-red-200",
+              };
+              return (
+                <span className={`inline-flex items-center text-[10px] font-semibold border rounded-full px-2.5 py-0.5 shrink-0 ${statusStyles[agreement.signingStatus] || "text-zinc-500 bg-zinc-100 border-zinc-200"}`}>
+                  {signingStatusLabel[agreement.signingStatus] || agreement.signingStatus}
+                </span>
+              );
+            })()}
             {agreement.clientName && (
               <span className="text-xs text-zinc-500 flex items-center gap-1">
                 <Building2 className="w-3 h-3" /> {agreement.clientName}
