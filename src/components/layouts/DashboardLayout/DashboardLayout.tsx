@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   BookText,
   FilePen,
+  Search,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -55,6 +56,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       : []),
     { name: "BRD Studio", href: APP_ROUTES.brd, icon: BookText },
     { name: "Agreements", href: APP_ROUTES.agreements, icon: FilePen },
+    { name: "SOW Analyzer", href: APP_ROUTES.sow, icon: Search },
     ...(isAdmin ? [{ name: "Users", href: APP_ROUTES.users, icon: Users }] : []),
     ...(isAdmin ? [{ name: "Roles", href: "/roles", icon: ShieldCheck }] : []),
   ];

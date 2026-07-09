@@ -28,15 +28,16 @@ interface BottomCommentThreadProps {
   viewerName: string;
   onCommentAdded: (c: BRDComment) => void;
   onCommentUpdated: (c: BRDComment) => void;
+  commentsUrl: string;
 }
 
 function BottomCommentThread({
-  token,
   topLevel,
   allComments,
   viewerName,
   onCommentAdded,
   onCommentUpdated,
+  commentsUrl,
 }: BottomCommentThreadProps) {
   const [replyContent, setReplyContent] = useState<Record<string, string>>({});
   const [replySubmitting, setReplySubmitting] = useState<string | null>(null);
@@ -50,7 +51,7 @@ function BottomCommentThread({
     if (!viewerName || !content || replySubmitting) return;
     setReplySubmitting(parentId);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments`, {
+      const res = await fetch(`${API_BASE_URL}${commentsUrl}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commenter_name: viewerName, content, parent_id: parentId }),
@@ -69,7 +70,7 @@ function BottomCommentThread({
     setTogglingId(commentId);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments/${commentId}/status`,
+        `${API_BASE_URL}${commentsUrl}/${commentId}/status`,
         { method: "PATCH" }
       );
       if (res.ok) {
@@ -207,9 +208,12 @@ interface Props {
   token: string;
   initialComments: BRDComment[];
   onCommentAdded: (c: BRDComment) => void;
+  /** Override the base API URL for comments (defaults to BRD endpoint). */
+  commentApiBase?: string;
 }
 
-export function CommentsSection({ token, initialComments, onCommentAdded }: Props) {
+export function CommentsSection({ token, initialComments, onCommentAdded, commentApiBase }: Props) {
+  const commentsUrl = commentApiBase ?? `/api/v1/brd/brds/share/${token}/comments`;
   const [localComments, setLocalComments] = useState<BRDComment[]>(initialComments);
   const { viewerName, saveViewerName } = useViewerName(token);
   const [nameInput, setNameInput] = useState("");
@@ -232,7 +236,7 @@ export function CommentsSection({ token, initialComments, onCommentAdded }: Prop
     setSubmitting(true);
     setSubmitError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments`, {
+      const res = await fetch(`${API_BASE_URL}${commentsUrl}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commenter_name: effectiveName, content: content.trim() }),
@@ -359,6 +363,7 @@ export function CommentsSection({ token, initialComments, onCommentAdded }: Prop
             viewerName={effectiveName}
             onCommentAdded={handleReplyAdded}
             onCommentUpdated={handleCommentUpdated}
+            commentsUrl={commentsUrl}
           />
         )}
       </div>

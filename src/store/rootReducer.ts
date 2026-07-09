@@ -10,6 +10,7 @@ import proposalIntelligenceReducer from "@/store/modules/proposalIntelligence/pr
 import documentsReducer from "@/store/modules/documents/documentsSlice";
 import brdReducer from "@/store/modules/brd/brdSlice";
 import agreementsReducer from "@/store/modules/agreements/agreementsSlice";
+import sowReducer from "@/store/modules/sow/sowSlice";
 
 const rootReducer = combineReducers({
   auth: authReducer,
@@ -23,6 +24,7 @@ const rootReducer = combineReducers({
   documents: documentsReducer,
   brd: brdReducer,
   agreements: agreementsReducer,
+  sow: sowReducer,
 });
 
 export default rootReducer;

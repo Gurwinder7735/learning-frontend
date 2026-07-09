@@ -56,6 +56,8 @@ export interface InlineCommentLayerProps {
   onCommentDeleted: (commentId: string) => void;
   onCommentUpdated: (comment: BRDComment) => void;
   children: React.ReactNode;
+  /** Override the base API path — defaults to BRD endpoint. */
+  commentApiBase?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -75,7 +77,8 @@ function useInlineCommentActions(
   token: string,
   onCommentAdded: (c: BRDComment) => void,
   onCommentDeleted: (id: string) => void,
-  onCommentUpdated: (c: BRDComment) => void
+  onCommentUpdated: (c: BRDComment) => void,
+  commentApiBase: string
 ) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -85,7 +88,7 @@ function useInlineCommentActions(
   const deleteComment = async (commentId: string, onDone?: () => void) => {
     setDeletingId(commentId);
     try {
-      await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments/${commentId}`, {
+      await fetch(`${API_BASE_URL}${commentApiBase}/${commentId}`, {
         method: "DELETE",
       });
       onCommentDeleted(commentId);
@@ -99,7 +102,7 @@ function useInlineCommentActions(
     setTogglingId(commentId);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments/${commentId}/status`,
+        `${API_BASE_URL}${commentApiBase}/${commentId}/status`,
         { method: "PATCH" }
       );
       if (res.ok) {
@@ -115,7 +118,7 @@ function useInlineCommentActions(
     if (!viewerName || !content.trim() || replySubmitting) return;
     setReplySubmitting(parentId);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments`, {
+      const res = await fetch(`${API_BASE_URL}${commentApiBase}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commenter_name: viewerName, content: content.trim(), parent_id: parentId }),
@@ -139,7 +142,7 @@ function useInlineCommentActions(
     if (!viewerName || !content.trim()) return null;
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/comments`, {
+      const res = await fetch(`${API_BASE_URL}${commentApiBase}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commenter_name: viewerName, content: content.trim(), anchor_y: anchorY, anchor_x: anchorX }),
@@ -161,6 +164,8 @@ function useInlineCommentActions(
 
 // ─── InlineCommentLayer ───────────────────────────────────────────────────────
 
+const DEFAULT_COMMENT_API_BASE = "/api/v1/brd/brds/share";
+
 export function InlineCommentLayer({
   token,
   comments,
@@ -168,7 +173,9 @@ export function InlineCommentLayer({
   onCommentDeleted,
   onCommentUpdated,
   children,
+  commentApiBase,
 }: InlineCommentLayerProps) {
+  const apiBase = commentApiBase ?? `${DEFAULT_COMMENT_API_BASE}/${token}/comments`;
   const containerRef = useRef<HTMLDivElement>(null);
 
   // UI state
@@ -184,7 +191,7 @@ export function InlineCommentLayer({
 
   // Hooks
   const { viewerName, saveViewerName } = useViewerName(token);
-  const actions = useInlineCommentActions(token, onCommentAdded, onCommentDeleted, onCommentUpdated);
+  const actions = useInlineCommentActions(token, onCommentAdded, onCommentDeleted, onCommentUpdated, apiBase);
 
   // Derived data: split top-level pins from replies
   const topLevelInline = comments.filter((c) => c.anchorY != null && !c.parentId);
