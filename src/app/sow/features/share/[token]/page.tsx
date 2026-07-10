@@ -6,7 +6,6 @@ import { Spin } from "antd";
 import { AlertCircle, Eye, EyeOff, FileSearch, FileText, Lock } from "lucide-react";
 import { SmartContentRenderer } from "@/components/features/BRD/SmartContentRenderer";
 import { InlineCommentLayer } from "@/components/features/BRD/InlineCommentLayer";
-import { CommentsSection } from "@/components/features/BRD/CommentsSection";
 import type { SOWFeatureDoc } from "@/types/models/SOW";
 import type { BRDComment } from "@/types/models/BRD";
 
@@ -266,14 +265,6 @@ export default function FeatureSharePage() {
           </div>
         )}
 
-        {doc.content && (
-          <CommentsSection
-            token={token}
-            initialComments={comments.filter((c) => c.anchorY == null)}
-            onCommentAdded={(c) => setComments((prev) => [...prev, c])}
-            commentApiBase={commentApiBase}
-          />
-        )}
       </div>
 
       <footer className="border-t border-zinc-100 mt-4 print:hidden">
