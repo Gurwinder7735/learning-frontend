@@ -8,6 +8,7 @@ export interface Meeting {
   meetingType: string;
   status: string;
   summary?: string | null;
+  aiSummary?: string | null;
   notes?: string | null;
   meetingDate: string;
   durationMinutes?: number | null;
@@ -27,6 +28,7 @@ export interface MeetingDecision {
   id: string;
   meetingId: string;
   decision: string;
+  aiGenerated?: boolean;
   createdBy?: string | null;
   createdAt: string;
 }
@@ -38,6 +40,7 @@ export interface MeetingActionItem {
   owner?: string | null;
   dueDate?: string | null;
   status: string;
+  aiGenerated?: boolean;
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;

@@ -157,6 +157,53 @@ const meetingsSlice = createSlice({
       state.error = action.payload;
     },
 
+    // ── AI meeting-summary generation ────────────────────────────────────
+    // The saga POSTs /generate-summary and returns the job id. The meeting
+    // detail page owns the SSE subscription itself (EventSource) because it
+    // needs to update local streaming UI state per token — pushing every
+    // token through Redux would be too chatty.
+    generateSummaryRequest: (state, _action: PayloadAction<{ meetingId: string }>) => {
+      state.isLoading = true;
+      state.error = null;
+    },
+    generateSummarySuccess: (state, _action: PayloadAction<{ meetingId: string; jobId: string }>) => {
+      state.isLoading = false;
+    },
+    generateSummaryFailure: (state, action: PayloadAction<string>) => {
+      state.isLoading = false;
+      state.error = action.payload;
+    },
+
+    deleteDecisionRequest: (state, _action: PayloadAction<{ meetingId: string; decisionId: string }>) => {
+      state.isLoading = true;
+    },
+    deleteDecisionSuccess: (state, action: PayloadAction<string>) => {
+      state.isLoading = false;
+      if (state.detail) {
+        state.detail.decisions = state.detail.decisions.filter((d) => d.id !== action.payload);
+      }
+    },
+    deleteDecisionFailure: (state, action: PayloadAction<string>) => {
+      state.isLoading = false;
+      state.error = action.payload;
+    },
+
+    updateDecisionRequest: (state, _action: PayloadAction<{ meetingId: string; decisionId: string; decision: string }>) => {
+      state.isLoading = true;
+    },
+    updateDecisionSuccess: (state, action: PayloadAction<MeetingDecision>) => {
+      state.isLoading = false;
+      if (state.detail) {
+        state.detail.decisions = state.detail.decisions.map((d) =>
+          d.id === action.payload.id ? action.payload : d
+        );
+      }
+    },
+    updateDecisionFailure: (state, action: PayloadAction<string>) => {
+      state.isLoading = false;
+      state.error = action.payload;
+    },
+
     fetchGoogleStatusRequest: (state) => {
       state.isLoading = true;
     },
@@ -203,6 +250,9 @@ export const {
   addActionItemRequest, addActionItemSuccess, addActionItemFailure,
   updateActionItemRequest, updateActionItemSuccess, updateActionItemFailure,
   deleteActionItemRequest, deleteActionItemSuccess, deleteActionItemFailure,
+  generateSummaryRequest, generateSummarySuccess, generateSummaryFailure,
+  deleteDecisionRequest, deleteDecisionSuccess, deleteDecisionFailure,
+  updateDecisionRequest, updateDecisionSuccess, updateDecisionFailure,
   fetchGoogleStatusRequest, fetchGoogleStatusSuccess, fetchGoogleStatusFailure,
   disconnectGoogleRequest, disconnectGoogleSuccess, disconnectGoogleFailure,
   clearMeetingError, clearMeetingDetail,
