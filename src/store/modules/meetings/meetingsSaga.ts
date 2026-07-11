@@ -12,6 +12,9 @@ import {
   addActionItemRequest, addActionItemSuccess, addActionItemFailure,
   updateActionItemRequest, updateActionItemSuccess, updateActionItemFailure,
   deleteActionItemRequest, deleteActionItemSuccess, deleteActionItemFailure,
+  generateSummaryRequest, generateSummarySuccess, generateSummaryFailure,
+  deleteDecisionRequest, deleteDecisionSuccess, deleteDecisionFailure,
+  updateDecisionRequest, updateDecisionSuccess, updateDecisionFailure,
   fetchGoogleStatusRequest, fetchGoogleStatusSuccess, fetchGoogleStatusFailure,
   disconnectGoogleRequest, disconnectGoogleSuccess, disconnectGoogleFailure,
 } from "./meetingsSlice";
@@ -162,6 +165,49 @@ function* deleteActionItemWorker(action: { type: string; payload: { meetingId: s
   }
 }
 
+function* generateSummaryWorker(action: { type: string; payload: { meetingId: string } }) {
+  try {
+    const response: ApiResponse<{ jobId: string; meetingId: string }> = yield call(apiRequest, {
+      url: API_ENDPOINTS.meetings.generateSummary(action.payload.meetingId),
+      method: "POST",
+    });
+    yield put(generateSummarySuccess({
+      meetingId: action.payload.meetingId,
+      jobId: response.data.jobId,
+    }));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to start summary generation";
+    yield put(generateSummaryFailure(message));
+  }
+}
+
+function* deleteDecisionWorker(action: { type: string; payload: { meetingId: string; decisionId: string } }) {
+  try {
+    yield call(apiRequest, {
+      url: API_ENDPOINTS.meetings.deleteDecision(action.payload.meetingId, action.payload.decisionId),
+      method: "DELETE",
+    });
+    yield put(deleteDecisionSuccess(action.payload.decisionId));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to delete decision";
+    yield put(deleteDecisionFailure(message));
+  }
+}
+
+function* updateDecisionWorker(action: { type: string; payload: { meetingId: string; decisionId: string; decision: string } }) {
+  try {
+    const response: ApiResponse<MeetingDecision> = yield call(apiRequest, {
+      url: API_ENDPOINTS.meetings.updateDecision(action.payload.meetingId, action.payload.decisionId),
+      method: "PUT",
+      data: { decision: action.payload.decision },
+    });
+    yield put(updateDecisionSuccess(response.data));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to update decision";
+    yield put(updateDecisionFailure(message));
+  }
+}
+
 function* fetchGoogleStatusWorker() {
   try {
     const response: ApiResponse<{ connected: boolean; email: string | null }> = yield call(apiRequest, {
@@ -197,6 +243,9 @@ export function* meetingsSaga() {
   yield takeLatest(addActionItemRequest.type, addActionItemWorker);
   yield takeLatest(updateActionItemRequest.type, updateActionItemWorker);
   yield takeLatest(deleteActionItemRequest.type, deleteActionItemWorker);
+  yield takeLatest(generateSummaryRequest.type, generateSummaryWorker);
+  yield takeLatest(deleteDecisionRequest.type, deleteDecisionWorker);
+  yield takeLatest(updateDecisionRequest.type, updateDecisionWorker);
   yield takeLatest(fetchGoogleStatusRequest.type, fetchGoogleStatusWorker);
   yield takeLatest(disconnectGoogleRequest.type, disconnectGoogleWorker);
 }
