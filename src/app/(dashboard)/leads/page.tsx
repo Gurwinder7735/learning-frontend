@@ -20,8 +20,15 @@ import { APP_ROUTES } from "@/lib/constants/appConstants";
 const statusColors: Record<string, string> = {
   new: "default",
   contacted: "blue",
+  follow_up: "cyan",
   meeting_scheduled: "orange",
+  discovery: "geekblue",
+  qualified: "lime",
+  proposal_in_progress: "gold",
   proposal_sent: "purple",
+  negotiation: "magenta",
+  decision_pending: "volcano",
+  on_hold: "default",
   won: "green",
   lost: "red",
 };
@@ -124,7 +131,7 @@ export default function LeadsPage() {
       width: 150,
       render: (status: string) => (
         <Tag color={statusColors[status] || "default"} className="!rounded-full !px-3 !py-0.5 !text-xs">
-          {status.replace("_", " ")}
+          {status.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
         </Tag>
       ),
     },
@@ -213,15 +220,26 @@ export default function LeadsPage() {
           className="max-w-xs"
         />
         <Select
-          placeholder="Status"
+          placeholder="Filter by Status"
           allowClear
-          style={{ width: 160 }}
+          showSearch
+          filterOption={(input, option) =>
+            (option?.label as string ?? "").toLowerCase().includes(input.toLowerCase())
+          }
+          style={{ width: 220 }}
           onChange={(val) => setStatusFilter(val)}
           options={[
             { value: "new", label: "New" },
             { value: "contacted", label: "Contacted" },
+            { value: "follow_up", label: "Follow Up" },
             { value: "meeting_scheduled", label: "Meeting Scheduled" },
+            { value: "discovery", label: "Discovery" },
+            { value: "qualified", label: "Qualified" },
+            { value: "proposal_in_progress", label: "Proposal in Progress" },
             { value: "proposal_sent", label: "Proposal Sent" },
+            { value: "negotiation", label: "Negotiation" },
+            { value: "decision_pending", label: "Decision Pending" },
+            { value: "on_hold", label: "On Hold" },
             { value: "won", label: "Won" },
             { value: "lost", label: "Lost" },
           ]}

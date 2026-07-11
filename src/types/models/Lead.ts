@@ -1,5 +1,11 @@
 import type { Meeting } from "./Meeting";
 
+export interface SalesPrepSection {
+  id: string;
+  title: string;
+  content: string;
+}
+
 export interface ActionItem {
   description: string;
   assignedTo?: string | null;
@@ -21,6 +27,7 @@ export interface Lead {
   assignedTo?: string | null;
   clientId?: string | null;
   salesPrepNotes?: string | null;
+  salesPrepSections: SalesPrepSection[];
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;

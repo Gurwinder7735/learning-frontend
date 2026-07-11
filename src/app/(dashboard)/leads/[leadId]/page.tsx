@@ -22,14 +22,23 @@ import {
   fetchGoogleStatusRequest,
 } from "@/store/modules/meetings/meetingsSlice";
 import { selectGoogleConnected } from "@/store/modules/meetings/meetingsSelectors";
-import RichTextEditor from "@/components/ui/RichTextEditor";
+import { BRDContentEditor } from "@/components/features/BRD/BRDContentEditor";
+import { apiRequest } from "@/lib/api/axiosInstance";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
+import type { SalesPrepSection } from "@/types/models/Lead";
 
 const statusColors: Record<string, string> = {
   new: "default",
   contacted: "blue",
+  follow_up: "cyan",
   meeting_scheduled: "orange",
+  discovery: "geekblue",
+  qualified: "lime",
+  proposal_in_progress: "gold",
   proposal_sent: "purple",
+  negotiation: "magenta",
+  decision_pending: "volcano",
+  on_hold: "default",
   won: "green",
   lost: "red",
 };
@@ -48,8 +57,15 @@ const sourceOptions = [
 const statusOptions = [
   { value: "new", label: "New" },
   { value: "contacted", label: "Contacted" },
+  { value: "follow_up", label: "Follow Up" },
   { value: "meeting_scheduled", label: "Meeting Scheduled" },
+  { value: "discovery", label: "Discovery" },
+  { value: "qualified", label: "Qualified" },
+  { value: "proposal_in_progress", label: "Proposal in Progress" },
   { value: "proposal_sent", label: "Proposal Sent" },
+  { value: "negotiation", label: "Negotiation" },
+  { value: "decision_pending", label: "Decision Pending" },
+  { value: "on_hold", label: "On Hold" },
   { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
 ];
@@ -92,7 +108,8 @@ export default function LeadDetailPage() {
   const [meetingDrawerOpen, setMeetingDrawerOpen] = useState(false);
   const [meetingForm] = Form.useForm();
 
-  const [salesPrepNotes, setSalesPrepNotes] = useState("");
+  const [salesPrepSections, setSalesPrepSections] = useState<SalesPrepSection[]>([]);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   const [meetingDeleting, setMeetingDeleting] = useState<string | null>(null);
@@ -112,16 +129,30 @@ export default function LeadDetailPage() {
   }, [isAdmin, dispatch]);
 
   useEffect(() => {
-    if (lead?.salesPrepNotes !== undefined) {
-      setSalesPrepNotes(lead.salesPrepNotes ?? "");
+    if (lead?.salesPrepSections !== undefined) {
+      const secs = lead.salesPrepSections ?? [];
+      setSalesPrepSections(secs);
+      if (secs.length > 0 && !activeSectionId) setActiveSectionId(secs[0].id);
     }
-  }, [lead?.salesPrepNotes]);
+  }, [lead?.id]); // eslint-disable-line
 
-  const handleSaveNotes = useCallback(() => {
+  const handleSaveNotes = useCallback(async () => {
     setIsSavingNotes(true);
-    dispatch(updateLeadRequest({ id: leadId, data: { salesPrepNotes } }));
-    setTimeout(() => setIsSavingNotes(false), 500);
-  }, [leadId, salesPrepNotes, dispatch]);
+    try {
+      const res = await apiRequest<{ data: { salesPrepSections: SalesPrepSection[] } }>({
+        url: `/api/v1/leads/${leadId}/sales-prep`,
+        method: "PATCH",
+        data: { sections: salesPrepSections },
+      });
+      const saved = res.data?.salesPrepSections ?? salesPrepSections;
+      setSalesPrepSections(saved);
+      message.success("Saved");
+    } catch {
+      message.error("Failed to save");
+    } finally {
+      setIsSavingNotes(false);
+    }
+  }, [leadId, salesPrepSections]);
 
   const handleUpdate = async () => {
     try {
@@ -238,9 +269,13 @@ export default function LeadDetailPage() {
           <Space>
             <Select
               value={lead.status}
-              style={{ width: 160 }}
+              style={{ width: 220 }}
               onChange={handleStatusChange}
               options={statusOptions}
+              showSearch
+              filterOption={(input, option) =>
+                (option?.label as string ?? "").toLowerCase().includes(input.toLowerCase())
+              }
               className="[&_.ant-select-selector]:!rounded-lg"
             />
             <Button icon={<Edit3 className="w-4 h-4" />} onClick={() => { editForm.setFieldsValue(lead); setEditCountry(lead.country ?? undefined); setEditDrawerOpen(true); }}>
@@ -400,25 +435,134 @@ export default function LeadDetailPage() {
             key: "sales-prep",
             label: "Sales Prep",
             children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Sales Preparation Notes</span>
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<Save className="w-4 h-4" />}
-                    onClick={handleSaveNotes}
-                    loading={isSavingNotes}
-                  >
-                    Save
-                  </Button>
-                </div>
-              }>
-                <RichTextEditor
-                  content={salesPrepNotes}
-                  onChange={setSalesPrepNotes}
-                  placeholder="Prepare your sales notes here — talking points, key info, objection handling, etc..."
-                />
+              <Card
+                className="!rounded-xl !border-zinc-200 !shadow-sm"
+                title={
+                  <div className="flex items-center justify-between w-full">
+                    <span>Sales Prep Workspace</span>
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<Save className="w-4 h-4" />}
+                      onClick={handleSaveNotes}
+                      loading={isSavingNotes}
+                      disabled={salesPrepSections.length === 0}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                }
+              >
+                {salesPrepSections.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto mb-4">
+                      <FileText className="w-6 h-6 text-zinc-400" />
+                    </div>
+                    <p className="text-sm text-zinc-500 mb-4">No sections yet. Create your first section to start taking notes.</p>
+                    <Button
+                      type="primary"
+                      icon={<Plus className="w-4 h-4" />}
+                      onClick={() => {
+                        const id = crypto.randomUUID();
+                        const newSection: SalesPrepSection = { id, title: "New Section", content: "" };
+                        setSalesPrepSections([newSection]);
+                        setActiveSectionId(id);
+                      }}
+                    >
+                      Add First Section
+                    </Button>
+                  </div>
+                ) : (
+                  <Tabs
+                    type="editable-card"
+                    activeKey={activeSectionId ?? undefined}
+                    onChange={(key) => setActiveSectionId(key)}
+                    onEdit={(targetKey, action) => {
+                      if (action === "add") {
+                        // Prompt for name immediately
+                        let nameInput = "";
+                        Modal.confirm({
+                          title: "New Section",
+                          content: (
+                            <AntInput
+                              placeholder="Section name (e.g. Chat Notes, Objections)"
+                              autoFocus
+                              onChange={(e) => { nameInput = e.target.value; }}
+                              onPressEnter={() => Modal.destroyAll()}
+                            />
+                          ),
+                          okText: "Create",
+                          onOk: () => {
+                            const title = nameInput.trim() || "New Section";
+                            const id = crypto.randomUUID();
+                            setSalesPrepSections((prev) => [...prev, { id, title, content: "" }]);
+                            setActiveSectionId(id);
+                          },
+                        });
+                      } else if (action === "remove") {
+                        const key = targetKey as string;
+                        const section = salesPrepSections.find((s) => s.id === key);
+                        Modal.confirm({
+                          title: `Delete "${section?.title ?? "this section"}"?`,
+                          content: "This will remove the section and its content. Save to persist.",
+                          okText: "Delete",
+                          okButtonProps: { danger: true },
+                          onOk: () => {
+                            setSalesPrepSections((prev) => {
+                              const next = prev.filter((s) => s.id !== key);
+                              if (activeSectionId === key) setActiveSectionId(next[0]?.id ?? null);
+                              return next;
+                            });
+                          },
+                        });
+                      }
+                    }}
+                    items={salesPrepSections.map((section) => ({
+                      key: section.id,
+                      label: (
+                        <span
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            let nameInput = section.title;
+                            Modal.confirm({
+                              title: "Rename Section",
+                              content: (
+                                <AntInput
+                                  defaultValue={section.title}
+                                  autoFocus
+                                  onChange={(e) => { nameInput = e.target.value; }}
+                                  onPressEnter={() => Modal.destroyAll()}
+                                />
+                              ),
+                              okText: "Rename",
+                              onOk: () => {
+                                const title = nameInput.trim() || section.title;
+                                setSalesPrepSections((prev) =>
+                                  prev.map((s) => s.id === section.id ? { ...s, title } : s)
+                                );
+                              },
+                            });
+                          }}
+                          title="Double-click to rename"
+                        >
+                          {section.title}
+                        </span>
+                      ),
+                      children: (
+                        <div className="mt-2">
+                          <BRDContentEditor
+                            content={section.content}
+                            onChange={(html) =>
+                              setSalesPrepSections((prev) =>
+                                prev.map((s) => s.id === section.id ? { ...s, content: html } : s)
+                              )
+                            }
+                          />
+                        </div>
+                      ),
+                    }))}
+                  />
+                )}
               </Card>
             ),
           },
