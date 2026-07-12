@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -20,7 +21,9 @@ import {
   Building2,
   Clock,
   Copy,
+  Eye,
   FileText,
+  History,
   Lock,
   LockOpen,
   Pencil,
@@ -118,16 +121,29 @@ function EditToolbar({
   onEdit,
   onSave,
   onCancel,
+  onPreview,
 }: {
   isEditing: boolean;
   isSaving: boolean;
   onEdit: () => void;
   onSave: () => void;
   onCancel: () => void;
+  // Optional — when supplied a Preview button appears while editing.
+  // Callers close over ``editContent`` themselves; the toolbar just fires.
+  onPreview?: () => void;
 }) {
   if (isEditing) {
     return (
       <div className="flex items-center gap-2">
+        {onPreview && (
+          <Button
+            size="small"
+            icon={<Eye className="w-3.5 h-3.5" />}
+            onClick={onPreview}
+          >
+            Preview
+          </Button>
+        )}
         <Button
           size="small"
           icon={<X className="w-3.5 h-3.5" />}
@@ -179,6 +195,7 @@ function DocumentPanel({
   onSave,
   onCancelEdit,
   onEditChange,
+  onPreview,
 }: {
   file: string;
   label: string;
@@ -190,6 +207,8 @@ function DocumentPanel({
   onSave: (file: string) => void;
   onCancelEdit: () => void;
   onEditChange: (v: string) => void;
+  // Optional — a Preview button shows while editing when supplied.
+  onPreview?: () => void;
 }) {
   const isEditing = editingFile === file;
   return (
@@ -201,6 +220,7 @@ function DocumentPanel({
         <EditToolbar
           isEditing={isEditing}
           isSaving={isSaving}
+          onPreview={onPreview}
           onEdit={() => onStartEdit(file, content)}
           onSave={() => onSave(file)}
           onCancel={onCancelEdit}
@@ -332,6 +352,19 @@ export default function ProposalDetailPage() {
   const [versions, setVersions] = useState<ProposalVersion[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
 
+  // Full-screen preview overlays. ``previewVersion`` handles both a
+  // stored ProposalVersion and a synthetic "__draft__" pseudo-version
+  // for previewing the live draft. ``editPreview`` shows the in-flight
+  // ``editContent`` while the user is mid-edit — helpful for spotting
+  // how the doc will look before saving.
+  const [previewVersion, setPreviewVersion] = useState<ProposalVersion | null>(null);
+  const [editPreview, setEditPreview] = useState<{ content: string; label: string } | null>(null);
+
+  // When set, the editor was seeded from a published version — kept as
+  // a **client-only** override in ``localContent``; the server draft is
+  // untouched until the user explicitly clicks Save.
+  const [editingFromVersion, setEditingFromVersion] = useState<string | null>(null);
+
   // ── Edit handlers ─────────────────────────────────────────────────
 
   const handleStartEdit = (file: string, content: string) => {
@@ -453,6 +486,8 @@ export default function ProposalDetailPage() {
     setLoadingVersions(true);
     try {
       const token = storage.getAccessToken();
+      // List responses omit ``content`` for weight; the detail endpoint
+      // (called on demand from Preview) includes it.
       const res = await fetch(
         `${API_BASE_URL}${API_ENDPOINTS.proposals.versions(proposalId)}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
@@ -466,6 +501,76 @@ export default function ProposalDetailPage() {
     } finally {
       setLoadingVersions(false);
     }
+  };
+
+  /**
+   * Fetch a version's content on demand (list endpoint omits it) and
+   * open the full-screen preview modal.
+   */
+  const handlePreviewVersion = async (v: ProposalVersion) => {
+    // If content is already loaded (rare — list endpoint doesn't include
+    // it but the modal-open pathway may already have it cached), just
+    // open. Otherwise fetch detail first.
+    if (v.content) {
+      setPreviewVersion(v);
+      return;
+    }
+    try {
+      const token = storage.getAccessToken();
+      const res = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.proposals.versionDetail(proposalId, v.id)}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setPreviewVersion({ ...v, content: json.data?.content ?? {} });
+    } catch {
+      message.error("Failed to load version content");
+    }
+  };
+
+  /**
+   * Load a published version's content into the editor as a
+   * client-side override. The server draft is NOT touched — the user
+   * still has to click Save inside the DocumentPanel to commit. Any
+   * time they want to bail they can click "Return to latest draft"
+   * which clears the override.
+   */
+  const handleEditFromVersion = async (v: ProposalVersion) => {
+    let content = v.content;
+    if (!content) {
+      try {
+        const token = storage.getAccessToken();
+        const res = await fetch(
+          `${API_BASE_URL}${API_ENDPOINTS.proposals.versionDetail(proposalId, v.id)}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        );
+        if (res.ok) {
+          const json = await res.json();
+          content = json.data?.content;
+        }
+      } catch {
+        /* falls through to the check below */
+      }
+    }
+    if (!content) {
+      message.error("Failed to load version content");
+      return;
+    }
+    setLocalContent(content);
+    setEditingFromVersion(v.label);
+    setPreviewVersion(null);
+    setPageTab("proposal");
+    message.info(
+      `Loaded v${v.label} into the editor. Click Save inside the panel to commit, or "Return to latest draft" to undo.`,
+      5,
+    );
+  };
+
+  const handleReturnToLatestDraft = () => {
+    setLocalContent({});
+    setEditingFromVersion(null);
+    if (editingFile) handleCancelEdit();
   };
 
   // ── Password handlers ─────────────────────────────────────────────
@@ -856,6 +961,27 @@ export default function ProposalDetailPage() {
         </div>
       )}
 
+      {/* Editing-from-version banner. Shown whenever the working copy
+          was seeded from a published version so the user has a clear
+          escape hatch back to the latest draft. */}
+      {editingFromVersion && (
+        <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <History className="w-4 h-4 shrink-0" />
+            <span>
+              Editing a copy of <strong>v{editingFromVersion}</strong>. Changes
+              are not saved until you click Save.
+            </span>
+          </div>
+          <button
+            onClick={handleReturnToLatestDraft}
+            className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline shrink-0 ml-4"
+          >
+            Return to latest draft
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       {isCompleted && (
         <Tabs
@@ -993,6 +1119,12 @@ export default function ProposalDetailPage() {
                       onSave={handleSave}
                       onCancelEdit={handleCancelEdit}
                       onEditChange={setEditContent}
+                      onPreview={() =>
+                        setEditPreview({
+                          content: editContent,
+                          label: "Final Proposal",
+                        })
+                      }
                     />
                   ) : (
                     <div className="text-center py-16 text-zinc-400 text-sm">
@@ -1026,6 +1158,12 @@ export default function ProposalDetailPage() {
                           onSave={handleSave}
                           onCancelEdit={handleCancelEdit}
                           onEditChange={setEditContent}
+                          onPreview={() =>
+                            setEditPreview({
+                              content: editContent,
+                              label: w.label,
+                            })
+                          }
                         />
                       ),
                     }),
@@ -1038,39 +1176,128 @@ export default function ProposalDetailPage() {
               label: "Version History",
               children: (
                 <div className="py-2">
-                  {loadingVersions ? (
-                    <div className="flex justify-center py-16">
-                      <Spin />
-                    </div>
-                  ) : versions.length === 0 ? (
-                    <div className="text-center py-16 text-zinc-400 text-sm">
-                      No published versions yet. Click <strong>Publish</strong> to
-                      create the first snapshot.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {versions.map((v) => (
-                        <div
-                          key={v.id}
-                          className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3"
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-zinc-900">
-                              v{v.label}
-                            </p>
-                            {v.note && (
-                              <p className="text-xs text-zinc-500 mt-0.5">
-                                {v.note}
-                              </p>
-                            )}
-                            <p className="text-[11px] text-zinc-400 mt-0.5">
-                              Published {formatDate(v.publishedAt)}
-                            </p>
-                          </div>
+                  <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                    {/* Working-copy row — always present, sits above
+                        the published snapshots. Preview shows the
+                        live editor content (with any local overrides
+                        already merged in). */}
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 bg-blue-50/30">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-bold text-zinc-800">
+                            Current Draft
+                          </span>
+                          <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 rounded-full px-2 py-0.5">
+                            Working copy
+                          </span>
+                          {editingFromVersion && (
+                            <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                              Loaded from v{editingFromVersion}
+                            </span>
+                          )}
                         </div>
-                      ))}
+                        <p className="text-xs text-zinc-400">
+                          Your current edits — not published until you click Publish
+                        </p>
+                      </div>
+                      <Button
+                        size="small"
+                        icon={<Eye className="w-3 h-3" />}
+                        onClick={() =>
+                          // Synthetic pseudo-version — the modal special-cases
+                          // ``id === "__draft__"`` to render primaryContent.
+                          setPreviewVersion({
+                            id: "__draft__",
+                            proposalId,
+                            label: "Draft",
+                            content: aiContent,
+                            coverMetadata: {},
+                            publishedBy: "",
+                            publishedAt: "",
+                            major: 0,
+                            minor: 0,
+                          } as unknown as ProposalVersion)
+                        }
+                      >
+                        Preview
+                      </Button>
                     </div>
-                  )}
+
+                    {loadingVersions ? (
+                      <div className="flex justify-center py-10">
+                        <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-700 rounded-full animate-spin" />
+                      </div>
+                    ) : versions.length === 0 ? (
+                      <div className="text-center py-10 text-zinc-400">
+                        <p className="text-sm">
+                          No published versions yet. Click <strong>Publish</strong>{" "}
+                          to create v1.0.
+                        </p>
+                      </div>
+                    ) : (
+                      versions.map((v) => {
+                        const isLive = v.id === proposal.publishedVersionId;
+                        return (
+                          <div
+                            key={v.id}
+                            className={`flex items-center justify-between px-5 py-4 border-b border-zinc-50 last:border-0 ${
+                              isLive ? "bg-emerald-50/30" : "hover:bg-zinc-50"
+                            } transition-colors`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                                <span
+                                  className={`text-sm font-bold tabular-nums ${
+                                    isLive ? "text-emerald-700" : "text-zinc-800"
+                                  }`}
+                                >
+                                  v{v.label}
+                                </span>
+                                {isLive && (
+                                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 rounded-full px-2 py-0.5">
+                                    Live on share link
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-zinc-400">
+                                {new Date(v.publishedAt).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                                {" · "}
+                                {new Date(v.publishedAt).toLocaleTimeString("en-US", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                                {v.note && (
+                                  <span className="ml-2 text-zinc-500 italic">
+                                    &quot;{v.note}&quot;
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 ml-4 shrink-0">
+                              <Button
+                                size="small"
+                                icon={<Eye className="w-3 h-3" />}
+                                onClick={() => handlePreviewVersion(v)}
+                              >
+                                Preview
+                              </Button>
+                              <Button
+                                size="small"
+                                icon={<Pencil className="w-3 h-3" />}
+                                onClick={() => handleEditFromVersion(v)}
+                              >
+                                Edit from this
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               ),
             },
@@ -1181,6 +1408,96 @@ export default function ProposalDetailPage() {
           />
         </div>
       </Modal>
+
+      {/* ── Full-screen preview overlays ────────────────────────────
+          Portaled to document.body so they escape any Tab / Modal
+          stacking context. Both auto-close on Escape via their close
+          buttons; nothing else is intercepted so users can still
+          scroll, select, print. */}
+      {editPreview &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex flex-col bg-white">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-200 bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <Eye className="w-4 h-4 text-zinc-500" />
+                <span className="text-sm font-bold text-zinc-900">
+                  Preview — {editPreview.label}
+                </span>
+                <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                  Unsaved changes
+                </span>
+              </div>
+              <button
+                onClick={() => setEditPreview(null)}
+                className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 rounded-lg px-3 py-1.5 transition-colors"
+              >
+                <X className="w-4 h-4" /> Back to editing
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-zinc-50">
+              <div className="max-w-4xl mx-auto px-6 py-10">
+                <div className="bg-white rounded-2xl border border-zinc-200 p-8 sm:p-12">
+                  <SmartContentRenderer content={editPreview.content} />
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {previewVersion &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex flex-col bg-white">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-200 bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <History className="w-4 h-4 text-zinc-500" />
+                <span className="text-sm font-bold text-zinc-900">
+                  {previewVersion.id === "__draft__"
+                    ? "Current Draft"
+                    : `Version v${previewVersion.label}`}
+                </span>
+                {previewVersion.id !== "__draft__" &&
+                  previewVersion.id === proposal.publishedVersionId && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 rounded-full px-2 py-0.5">
+                      Live on share link
+                    </span>
+                  )}
+              </div>
+              <div className="flex items-center gap-2">
+                {previewVersion.id !== "__draft__" && (
+                  <Button
+                    icon={<Pencil className="w-3.5 h-3.5" />}
+                    onClick={() => handleEditFromVersion(previewVersion)}
+                  >
+                    Edit from this version
+                  </Button>
+                )}
+                <button
+                  onClick={() => setPreviewVersion(null)}
+                  className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <X className="w-4 h-4" /> Close
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-zinc-50">
+              <div className="max-w-4xl mx-auto px-6 py-10">
+                <div className="bg-white rounded-2xl border border-zinc-200 p-8 sm:p-12">
+                  <SmartContentRenderer
+                    content={
+                      previewVersion.id === "__draft__"
+                        ? primaryContent
+                        : (previewVersion.content?.["improved-proposal.md"] ||
+                            previewVersion.content?.["proposal.md"] ||
+                            "")
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
