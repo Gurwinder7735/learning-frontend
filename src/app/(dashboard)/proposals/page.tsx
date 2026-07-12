@@ -2,579 +2,397 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Button,
-  Input,
-  Select,
-  Space,
-  Tag,
-  Card,
-  Row,
-  Col,
-  Statistic,
-  Typography,
-  Drawer,
-  Dropdown,
-  Modal,
-  Slider,
-} from "antd";
+import { Button, Drawer, Modal, message, Tooltip } from "antd";
 import {
   FileText,
-  Send,
-  CheckCircle,
-  XCircle,
   Sparkles,
-  Trash2,
-  MoreHorizontal,
   Loader2,
-  Settings,
+  Building2,
+  Clock,
+  CheckCircle2,
+  Trash2,
+  AlertCircle,
+  Lock,
+  Globe,
 } from "lucide-react";
 import Link from "next/link";
+
 import { PageHeader } from "@/components/ui/PageHeader";
-import { storage } from "@/lib/utils/storage";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
-import { useDebounce } from "@/hooks/useDebounce";
 import {
   fetchProposalsRequest,
-  fetchStatsRequest,
-  deleteProposalRequest,
 } from "@/store/modules/proposals/proposalsSlice";
 import {
   selectProposals,
-  selectProposalsMeta,
-  selectProposalsStats,
+  selectProposalsLoading,
 } from "@/store/modules/proposals/proposalsSelectors";
-import { selectClients, selectClientsMeta } from "@/store/modules/clients/clientsSelectors";
+import { fetchBRDsRequest } from "@/store/modules/brd/brdSlice";
+import { selectBRDs, selectBRDLoading } from "@/store/modules/brd/brdSelectors";
+import {
+  selectClients,
+  selectClientsMeta,
+} from "@/store/modules/clients/clientsSelectors";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
+import { ProposalGenerationForm } from "@/components/features/Proposals/ProposalGenerationForm";
+import { storage } from "@/lib/utils/storage";
+import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
+import type { Proposal, ProposalGenerateInput } from "@/types/models/Proposal";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-const statusColors: Record<string, string> = {
-  draft: "default",
-  internal_review: "blue",
-  sent: "purple",
-  client_review: "orange",
-  approved: "green",
-  rejected: "red",
-  archived: "default",
+// ─── Date helpers ────────────────────────────────────────────────────────
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// Card left-border accent by status.
+const accentClass: Record<string, string> = {
+  completed: "border-l-emerald-500",
+  generating: "border-l-blue-500",
+  failed: "border-l-red-400",
+  draft: "border-l-zinc-300",
+  archived: "border-l-zinc-200",
 };
 
-const statusLabels: Record<string, string> = {
-  draft: "Draft",
-  internal_review: "Internal Review",
-  sent: "Sent",
-  client_review: "Client Review",
-  approved: "Approved",
-  rejected: "Rejected",
-  archived: "Archived",
-};
+// ─── Card ────────────────────────────────────────────────────────────────
+
+function ProposalCard({
+  proposal,
+  onDelete,
+}: {
+  proposal: Proposal;
+  onDelete: (p: Proposal) => void;
+}) {
+  const isGenerating = proposal.status === "generating";
+  const isCompleted = proposal.status === "completed";
+  const isFailed = proposal.status === "failed";
+  const isPublished = !!proposal.publishedVersionLabel;
+
+  return (
+    <div
+      className={`relative group bg-white rounded-2xl border-l-4 border border-zinc-100 ${
+        accentClass[proposal.status] || "border-l-zinc-300"
+      } hover:border-zinc-200 hover:shadow-md transition-all duration-200`}
+    >
+      <Link
+        href={`${APP_ROUTES.proposals}/${proposal.id}`}
+        className="block p-5"
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-bold text-zinc-900 group-hover:text-zinc-700 transition-colors leading-snug line-clamp-2">
+              {proposal.title || proposal.name}
+            </h3>
+            {proposal.brdName && (
+              <p className="text-[11px] text-zinc-400 mt-1 truncate">
+                Based on: {proposal.brdName}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isGenerating && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                Generating
+              </span>
+            )}
+            {isFailed && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                <AlertCircle className="w-2.5 h-2.5" />
+                Failed
+              </span>
+            )}
+            {isCompleted && isPublished && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                <Globe className="w-2.5 h-2.5" />
+                v{proposal.publishedVersionLabel} live
+              </span>
+            )}
+            {isCompleted && !isPublished && (
+              <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 rounded-full px-2 py-0.5">
+                Not published
+              </span>
+            )}
+          </div>
+        </div>
+
+        {proposal.clientName ? (
+          <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-700 mb-3">
+            <Building2 className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+            {proposal.clientName}
+          </div>
+        ) : (
+          <div className="text-xs text-zinc-400 italic mb-3">
+            No client assigned
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-[11px] text-zinc-400 border-t border-zinc-50 pt-3 mt-1">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatDate(proposal.createdAt)}
+            </span>
+            <span className="text-zinc-300">•</span>
+            <span>
+              {proposal.paymentType === "cash_equity"
+                ? `${proposal.currency} + ${proposal.equityPercentage ?? 0}% equity`
+                : proposal.currency}
+            </span>
+            {proposal.isPasswordProtected && (
+              <Tooltip title="Password protected">
+                <Lock className="w-3 h-3 text-zinc-400" />
+              </Tooltip>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {isCompleted && (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            )}
+            <span className="text-zinc-300">{formatTime(proposal.createdAt)}</span>
+          </div>
+        </div>
+      </Link>
+
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDelete(proposal);
+        }}
+        className="absolute top-4 right-4 w-7 h-7 rounded-lg bg-white border border-zinc-200 flex items-center justify-center text-zinc-300 hover:text-red-500 hover:border-red-200 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+        title="Delete proposal"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────
 
 export default function ProposalsPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const proposals = useAppSelector(selectProposals);
-  const meta = useAppSelector(selectProposalsMeta);
-  const stats = useAppSelector(selectProposalsStats);
+  const isLoading = useAppSelector(selectProposalsLoading);
+  const brds = useAppSelector(selectBRDs);
+  const brdsLoading = useAppSelector(selectBRDLoading);
   const clients = useAppSelector(selectClients);
   const clientsMeta = useAppSelector(selectClientsMeta);
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string | undefined>();
-  const [clientFilter, setClientFilter] = useState<string | undefined>();
-  const debouncedSearch = useDebounce(search);
-
-  const [genOpen, setGenOpen] = useState(false);
-  const [genLoading, setGenLoading] = useState(false);
-  const [genName, setGenName] = useState("");
-  const [genClientId, setGenClientId] = useState<string | undefined>();
-  const [genProjectName, setGenProjectName] = useState("");
-  const [genBudget, setGenBudget] = useState<number | undefined>();
-  const [genInputText, setGenInputText] = useState("");
-
-  // Generation settings overrides
-  const [genHourlyRate, setGenHourlyRate] = useState<number | undefined>();
-  const [genAiFactor, setGenAiFactor] = useState<number | undefined>();
-  const [genTeamSize, setGenTeamSize] = useState<number | undefined>();
-  const [showSettingsOverride, setShowSettingsOverride] = useState(false);
-
-  // Load global defaults
-  useEffect(() => {
-    const loadDefaults = async () => {
-      try {
-        const token = storage.getAccessToken();
-        const res = await fetch(`${API_BASE_URL}/api/v1/proposal-intelligence/settings`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (res.ok) {
-          const json = await res.json();
-          const d = json.data;
-          setGenHourlyRate(d.hourlyRate);
-          setGenAiFactor(d.aiEfficiencyFactor);
-          setGenTeamSize(d.teamSize);
-        }
-      } catch {
-        /* silent */
-      }
-    };
-    loadDefaults();
-  }, [genOpen]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    dispatch(
-      fetchProposalsRequest({
-        search: debouncedSearch,
-        status: statusFilter,
-        clientId: clientFilter,
-        limit: 50,
-      })
-    );
-  }, [debouncedSearch, statusFilter, clientFilter, dispatch]);
-
-  useEffect(() => {
-    dispatch(fetchStatsRequest());
+    dispatch(fetchProposalsRequest());
+    dispatch(fetchBRDsRequest());
     dispatch(fetchClientsRequest({ limit: 200 }));
   }, [dispatch]);
 
-  const handleGenerate = async () => {
-    if (!genInputText.trim() || genLoading) return;
-    setGenLoading(true);
+  const handleDelete = (proposal: Proposal) => {
+    Modal.confirm({
+      title: "Delete Proposal",
+      content: `Delete "${proposal.title || proposal.name}"? This cannot be undone.`,
+      okText: "Delete",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const token = storage.getAccessToken();
+          const res = await fetch(
+            `${API_BASE_URL}${API_ENDPOINTS.proposals.delete(proposal.id)}`,
+            {
+              method: "DELETE",
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            },
+          );
+          if (!res.ok) throw new Error();
+          message.success("Proposal deleted");
+          dispatch(fetchProposalsRequest());
+        } catch {
+          message.error("Failed to delete proposal");
+        }
+      },
+    });
+  };
+
+  const handleGenerate = async (data: ProposalGenerateInput) => {
+    setGenerating(true);
     try {
       const token = storage.getAccessToken();
-      const res = await fetch(`${API_BASE_URL}/api/v1/proposal-intelligence/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      const res = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.proposals.generate}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(data),
         },
-        body: JSON.stringify({
-          inputText: genInputText.trim(),
-          name: genName.trim() || undefined,
-          clientId: genClientId || undefined,
-          projectName: genProjectName.trim() || undefined,
-          pricingCost: genBudget || undefined,
-          hourlyRate: showSettingsOverride ? genHourlyRate : undefined,
-          aiEfficiencyFactor: showSettingsOverride ? genAiFactor : undefined,
-          teamSize: showSettingsOverride ? genTeamSize : undefined,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || err?.message || `HTTP ${res.status}`);
+      }
       const json = await res.json();
       const proposalId = json.data?.proposalId;
-      setGenOpen(false);
-      if (proposalId) {
-        router.push(`/proposals/${proposalId}`);
-      }
-    } catch {
-      Modal.error({ title: "Generation failed", content: "Could not start proposal generation." });
+      setDrawerOpen(false);
+      message.success("Proposal generation started!");
+      if (proposalId) router.push(`${APP_ROUTES.proposals}/${proposalId}`);
+    } catch (e: unknown) {
+      Modal.error({
+        title: "Generation failed",
+        content: e instanceof Error ? e.message : "Could not start generation.",
+      });
     } finally {
-      setGenLoading(false);
+      setGenerating(false);
     }
   };
 
-  const handleDeleteProposal = (id: string, name: string) => {
-    Modal.confirm({
-      title: "Delete proposal",
-      content: `Delete "${name}"?`,
-      okText: "Delete",
-      okButtonProps: { danger: true },
-      onOk: () => dispatch(deleteProposalRequest(id)),
-    });
-  };
+  const completedCount = proposals.filter((p) => p.status === "completed").length;
+  const publishedCount = proposals.filter((p) => p.publishedVersionLabel).length;
+  const generatingCount = proposals.filter(
+    (p) => p.status === "generating",
+  ).length;
 
   return (
     <div>
       <PageHeader
-        title="Proposal Studio"
-        subtitle="Create, manage, and share professional project proposals."
+        title="Proposals"
+        subtitle="Generate professional, milestone-based client proposals from any completed BRD."
       />
 
-      {stats && (
-        <Row gutter={[16, 16]} className="mb-6">
-          <Col xs={12} sm={6}>
-            <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic
-                title="Total Proposals"
-                value={stats.totalProposals}
-                prefix={<FileText className="w-4 h-4 text-zinc-400 mr-1" />}
-                valueStyle={{ fontSize: 24 }}
-              />
-            </Card>
-          </Col>
-          <Col xs={12} sm={6}>
-            <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic
-                title="Draft"
-                value={stats.draftCount}
-                prefix={<FileText className="w-4 h-4 text-zinc-400 mr-1" />}
-                valueStyle={{ fontSize: 24 }}
-              />
-            </Card>
-          </Col>
-          <Col xs={12} sm={6}>
-            <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic
-                title="Sent"
-                value={stats.sentCount}
-                prefix={<Send className="w-4 h-4 text-purple-500 mr-1" />}
-                valueStyle={{ fontSize: 24, color: "#7c3aed" }}
-              />
-            </Card>
-          </Col>
-          <Col xs={12} sm={6}>
-            <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic
-                title="Approved"
-                value={stats.approvedCount}
-                prefix={<CheckCircle className="w-4 h-4 text-green-500 mr-1" />}
-                valueStyle={{ fontSize: 24, color: "#16a34a" }}
-              />
-            </Card>
-          </Col>
-          <Col xs={12} sm={6}>
-            <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic
-                title="Rejected"
-                value={stats.rejectedCount}
-                prefix={<XCircle className="w-4 h-4 text-red-500 mr-1" />}
-                valueStyle={{ fontSize: 24, color: "#dc2626" }}
-              />
-            </Card>
-          </Col>
-        </Row>
-      )}
-
-      <div className="mb-4 flex flex-wrap gap-3 items-center">
-        <Input.Search
-          placeholder="Search proposals..."
-          allowClear
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
-        <Select
-          placeholder="Status"
-          allowClear
-          style={{ width: 150 }}
-          onChange={(val) => setStatusFilter(val)}
-          options={[
-            { value: "draft", label: "Draft" },
-            { value: "internal_review", label: "Internal Review" },
-            { value: "sent", label: "Sent" },
-            { value: "client_review", label: "Client Review" },
-            { value: "approved", label: "Approved" },
-            { value: "rejected", label: "Rejected" },
-            { value: "archived", label: "Archived" },
-          ]}
-        />
-        <Select
-          placeholder="Client"
-          allowClear
-          showSearch
-          style={{ width: 180 }}
-          onChange={(val) => setClientFilter(val)}
-          loading={clientsMeta.isLoading}
-          filterOption={(input, option) =>
-            (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
-          }
-          notFoundContent={clientsMeta.isLoading ? "Loading..." : "No clients found"}
-          options={clients.map((c) => ({ value: c.id, label: c.companyName }))}
-        />
-        <div className="flex-1" />
-        <Button
-          type="primary"
-          icon={<Sparkles className="w-4 h-4" />}
-          onClick={() => setGenOpen(true)}
-          className="!bg-black"
-        >
-          Generate Proposal
-        </Button>
-      </div>
-
-      {meta.isLoading && proposals.length === 0 ? (
-        <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
-        </div>
-      ) : proposals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-          <FileText className="w-16 h-16 mb-4 text-zinc-300" />
-          <Typography.Text className="text-lg font-medium text-zinc-500">
-            No proposals yet
-          </Typography.Text>
-          <Typography.Text className="text-sm text-zinc-400 mb-4">
-            Generate your first AI proposal to get started.
-          </Typography.Text>
+      {proposals.length > 0 && (
+        <div className="flex items-center gap-6 mb-6 text-xs text-zinc-500">
+          <span>
+            <strong className="text-zinc-800 font-semibold">
+              {proposals.length}
+            </strong>{" "}
+            total
+          </span>
+          <span>
+            <strong className="text-emerald-700 font-semibold">
+              {publishedCount}
+            </strong>{" "}
+            published
+          </span>
+          <span>
+            <strong className="text-zinc-700 font-semibold">{completedCount}</strong>{" "}
+            completed
+          </span>
+          {generatingCount > 0 && (
+            <span className="flex items-center gap-1 text-blue-600">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <strong>{generatingCount}</strong> generating
+            </span>
+          )}
+          <div className="flex-1" />
           <Button
             type="primary"
             icon={<Sparkles className="w-4 h-4" />}
-            onClick={() => setGenOpen(true)}
-            className="!bg-black"
+            onClick={() => setDrawerOpen(true)}
+            className="!bg-zinc-900"
           >
             Generate Proposal
           </Button>
         </div>
-      ) : (
-        <div className="space-y-2">
-          {proposals.map((proposal) => (
-            <Link
-              key={proposal.id}
-              href={`${APP_ROUTES.proposals}/${proposal.id}`}
-              className="block group"
-            >
-              <Card
-                className="!rounded-xl !border-zinc-200 !shadow-sm hover:!shadow-md hover:!border-zinc-300 transition-all !cursor-pointer"
-                size="small"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0 group-hover:bg-zinc-200 transition-colors">
-                    <FileText className="w-5 h-5 text-zinc-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                      <Typography.Text className="text-sm font-semibold text-zinc-900 group-hover:text-blue-600 transition-colors truncate max-w-[200px]">
-                        {proposal.name}
-                      </Typography.Text>
-                      <Tag
-                        color={statusColors[proposal.status] || "default"}
-                        className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none !h-[18px] !flex !items-center shrink-0"
-                      >
-                        {statusLabels[proposal.status] || proposal.status}
-                      </Tag>
-                      {proposal.isAiGenerated && !proposal.pricing && (
-                        <Tag
-                          color="processing"
-                          className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none !h-[18px] !flex !items-center shrink-0"
-                        >
-                          Generating
-                        </Tag>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
-                      {proposal.clientName && <span>{proposal.clientName}</span>}
-                      {proposal.projectName && <span>Project: {proposal.projectName}</span>}
-                    </div>
-                  </div>
-                  <Space className="shrink-0">
-                    {proposal.pricing && proposal.pricing.cost > 0 && (
-                      <Typography.Text className="text-xs font-medium text-zinc-600">
-                        {proposal.pricing.currency} {proposal.pricing.cost.toLocaleString()}
-                      </Typography.Text>
-                    )}
-                  </Space>
-                  <Dropdown
-                    menu={{
-                      items: [
-                        {
-                          key: "delete",
-                          label: "Delete",
-                          danger: true,
-                          icon: <Trash2 className="w-3.5 h-3.5" />,
-                          onClick: () => handleDeleteProposal(proposal.id, proposal.name),
-                        },
-                      ],
-                    }}
-                    trigger={["click"]}
-                  >
-                    <Button
-                      type="text"
-                      size="small"
-                      className="!text-zinc-400 hover:!text-zinc-700 -mr-2"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      icon={<MoreHorizontal className="w-4 h-4" />}
-                    />
-                  </Dropdown>
-                </div>
-              </Card>
-            </Link>
-          ))}
+      )}
+
+      {isLoading && proposals.length === 0 ? (
+        <div className="flex justify-center py-24">
+          <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
         </div>
+      ) : proposals.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-100 flex items-center justify-center mb-5">
+            <FileText className="w-8 h-8 text-zinc-400" />
+          </div>
+          <h3 className="text-base font-bold text-zinc-700 mb-1">
+            No proposals yet
+          </h3>
+          <p className="text-sm text-zinc-400 mb-6 max-w-sm">
+            Pick a completed BRD, add commercial inputs, and let the AI pipeline
+            draft a professional client-ready proposal.
+          </p>
+          <Button
+            type="primary"
+            size="large"
+            icon={<Sparkles className="w-4 h-4" />}
+            onClick={() => setDrawerOpen(true)}
+            className="!bg-zinc-900"
+          >
+            Generate your first proposal
+          </Button>
+        </div>
+      ) : (
+        <>
+          {generatingCount > 0 && (
+            <div className="mb-6">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
+                In Progress
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {proposals
+                  .filter((p) => p.status === "generating")
+                  .map((p) => (
+                    <ProposalCard key={p.id} proposal={p} onDelete={handleDelete} />
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {proposals.filter((p) => p.status !== "generating").length > 0 && (
+            <div>
+              {generatingCount > 0 && (
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
+                  All Proposals
+                </p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {proposals
+                  .filter((p) => p.status !== "generating")
+                  .map((p) => (
+                    <ProposalCard key={p.id} proposal={p} onDelete={handleDelete} />
+                  ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <Drawer
         title="Generate AI Proposal"
-        width={640}
-        open={genOpen}
+        width={720}
+        open={drawerOpen}
         onClose={() => {
-          if (!genLoading) setGenOpen(false);
+          if (!generating) setDrawerOpen(false);
         }}
         destroyOnClose
       >
-        <div className="space-y-5">
-          <Typography.Text className="text-sm font-medium text-zinc-700 block">
-            Proposal Details
-          </Typography.Text>
-          <div>
-            <Typography.Text className="text-xs font-medium text-zinc-500 block mb-1">
-              Proposal Name
-            </Typography.Text>
-            <Input
-              value={genName}
-              onChange={(e) => setGenName(e.target.value)}
-              placeholder="e.g. Salon Platform Proposal"
-              disabled={genLoading}
-            />
-          </div>
-          <div>
-            <Typography.Text className="text-xs font-medium text-zinc-500 block mb-1">
-              Client
-            </Typography.Text>
-            <Select
-              value={genClientId}
-              onChange={setGenClientId}
-              placeholder="Select client"
-              allowClear
-              showSearch
-              disabled={genLoading}
-              loading={clientsMeta.isLoading}
-              style={{ width: "100%" }}
-              getPopupContainer={(trigger) => trigger.parentNode}
-              filterOption={(input, option) =>
-                (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
-              }
-              notFoundContent={
-                clientsMeta.error
-                  ? "Failed to load clients"
-                  : clientsMeta.isLoading
-                    ? "Loading..."
-                    : "No clients found"
-              }
-              options={clients.map((c) => ({ value: c.id, label: c.companyName }))}
-            />
-          </div>
-          <div>
-            <Typography.Text className="text-xs font-medium text-zinc-500 block mb-1">
-              Project Name
-            </Typography.Text>
-            <Input
-              value={genProjectName}
-              onChange={(e) => setGenProjectName(e.target.value)}
-              placeholder="e.g. Salon Booking Platform"
-              disabled={genLoading}
-            />
-          </div>
-
-          <div className="border-t border-zinc-100 pt-5">
-            <Typography.Text className="text-sm font-medium text-zinc-700 block mb-3">
-              Client Requirements
-            </Typography.Text>
-            <Input.TextArea
-              value={genInputText}
-              onChange={(e) => setGenInputText(e.target.value)}
-              placeholder="Describe the client project requirements..."
-              rows={8}
-              disabled={genLoading}
-              className="!text-sm"
-            />
-          </div>
-
-          <div>
-            <Typography.Text className="text-xs font-medium text-zinc-500 block mb-1">
-              Budget
-            </Typography.Text>
-            <Input
-              type="number"
-              value={genBudget}
-              onChange={(e) => setGenBudget(e.target.value ? Number(e.target.value) : undefined)}
-              placeholder="e.g. 20000"
-              prefix="$"
-              disabled={genLoading}
-              className="!w-48"
-            />
-          </div>
-
-          <div className="border-t border-zinc-100 pt-4">
-            <Button
-              type="text"
-              className="!p-0 !text-xs !text-zinc-500 hover:!text-zinc-700"
-              icon={
-                <Settings
-                  className={`w-3.5 h-3.5 transition-transform ${showSettingsOverride ? "rotate-45" : ""}`}
-                />
-              }
-              onClick={() => setShowSettingsOverride(!showSettingsOverride)}
-            >
-              Override Generation Settings
-            </Button>
-            {showSettingsOverride && (
-              <div className="mt-4 space-y-4 pl-1">
-                <div>
-                  <Typography.Text className="text-xs font-medium text-zinc-500 block mb-1">
-                    Hourly Rate
-                  </Typography.Text>
-                  <Input
-                    type="number"
-                    value={genHourlyRate}
-                    onChange={(e) =>
-                      setGenHourlyRate(e.target.value ? Number(e.target.value) : undefined)
-                    }
-                    prefix="$"
-                    disabled={genLoading}
-                    className="!w-40"
-                  />
-                </div>
-                <div>
-                  <Typography.Text className="text-xs font-medium text-zinc-500 block mb-1">
-                    AI Efficiency Factor
-                  </Typography.Text>
-                  <div className="max-w-xs">
-                    <Slider
-                      min={0.05}
-                      max={1.0}
-                      step={0.05}
-                      value={genAiFactor ?? 0.3}
-                      onChange={(val) => setGenAiFactor(val)}
-                      disabled={genLoading}
-                      tooltip={{
-                        formatter: (v) =>
-                          `${(v ?? 0.3).toFixed(2)} (${Math.round((1 - (v ?? 0.3)) * 100)}% faster)`,
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs text-zinc-400 max-w-xs">
-                    <span>Very fast</span>
-                    <span>Traditional</span>
-                  </div>
-                </div>
-                <div>
-                  <Typography.Text className="text-xs font-medium text-zinc-500 block mb-1">
-                    Team Size
-                  </Typography.Text>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={genTeamSize}
-                    onChange={(e) =>
-                      setGenTeamSize(e.target.value ? Number(e.target.value) : undefined)
-                    }
-                    disabled={genLoading}
-                    className="!w-24"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <Button
-              type="primary"
-              icon={
-                genLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
-                )
-              }
-              onClick={handleGenerate}
-              disabled={!genInputText.trim() || genLoading}
-              className="!bg-black"
-            >
-              {genLoading ? "Starting..." : "Generate"}
-            </Button>
-          </div>
-        </div>
+        <ProposalGenerationForm
+          brds={brds}
+          brdsLoading={brdsLoading}
+          clients={clients}
+          clientsLoading={clientsMeta.isLoading}
+          onSubmit={handleGenerate}
+          loading={generating}
+        />
       </Drawer>
     </div>
   );

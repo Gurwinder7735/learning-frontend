@@ -10,7 +10,6 @@ import {
   Users,
   Building2,
   Calendar,
-  FileCheck,
   Menu,
   X,
   Settings,
@@ -22,6 +21,7 @@ import {
   BookText,
   FilePen,
   Search,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -51,10 +51,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       ? [{ name: "Clients", href: APP_ROUTES.clients, icon: Building2 }]
       : []),
     { name: "Meetings", href: APP_ROUTES.meetings, icon: Calendar },
-    ...(can("proposals", "view")
-      ? [{ name: "Proposals", href: APP_ROUTES.proposals, icon: FileCheck }]
-      : []),
     { name: "BRD Studio", href: APP_ROUTES.brd, icon: BookText },
+    { name: "Proposals", href: APP_ROUTES.proposals, icon: FileText },
     { name: "Agreements", href: APP_ROUTES.agreements, icon: FilePen },
     { name: "SOW Analyzer", href: APP_ROUTES.sow, icon: Search },
     ...(isAdmin ? [{ name: "Users", href: APP_ROUTES.users, icon: Users }] : []),

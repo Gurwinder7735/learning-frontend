@@ -1,10 +1,20 @@
-import type { RootState } from "@/store";
+import type { RootState } from "@/store/index";
+import type { ProposalsState } from "./proposalsTypes";
 
-export const selectProposals = (state: RootState) => state.proposals.items;
-export const selectProposalsMeta = (state: RootState) => ({
-  total: state.proposals.total, isLoading: state.proposals.isLoading, error: state.proposals.error,
-});
-export const selectProposalsStats = (state: RootState) => state.proposals.stats;
-export const selectProposalDetail = (state: RootState) => state.proposals.detail;
-export const selectProposalVersions = (state: RootState) => state.proposals.versions;
-export const selectProposalActivities = (state: RootState) => state.proposals.activities;
+export const selectProposalsState = (state: RootState): ProposalsState =>
+  state.proposals;
+
+export const selectProposals = (state: RootState) =>
+  selectProposalsState(state).proposals;
+export const selectCurrentProposal = (state: RootState) =>
+  selectProposalsState(state).currentProposal;
+export const selectCurrentJob = (state: RootState) =>
+  selectProposalsState(state).currentJob;
+export const selectAgentRuns = (state: RootState) =>
+  selectProposalsState(state).currentAgentRuns;
+export const selectAgentStream = (state: RootState) =>
+  selectProposalsState(state).agentStream;
+export const selectIsGenerating = (state: RootState) =>
+  selectProposalsState(state).isGenerating;
+export const selectProposalsLoading = (state: RootState) =>
+  selectProposalsState(state).isLoading;

@@ -1,91 +1,120 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import type { Proposal, ProposalDetail, ProposalVersion, ProposalActivity, ProposalStats } from "@/types/models/Proposal";
-import type { ProposalsState, ProposalsQuery, ProposalCreatePayload, ProposalUpdatePayload } from "./proposalsTypes";
+import type { ProposalsState } from "./proposalsTypes";
+import type {
+  Proposal,
+  ProposalAgentRun,
+  ProposalJob,
+} from "@/types/models/Proposal";
 
 const initialState: ProposalsState = {
-  items: [],
-  total: 0,
+  proposals: [],
+  currentProposal: null,
+  currentJob: null,
+  currentAgentRuns: [],
+  agentStream: {},
+  isGenerating: false,
   isLoading: false,
   error: null,
-  stats: null,
-  detail: null,
-  versions: [],
-  activities: [],
 };
 
 const proposalsSlice = createSlice({
   name: "proposals",
   initialState,
   reducers: {
-    fetchProposalsRequest: (state, _action: PayloadAction<ProposalsQuery>) => {
+    fetchProposalsRequest(state) {
       state.isLoading = true;
       state.error = null;
     },
-    fetchProposalsSuccess: (state, action: PayloadAction<{ items: Proposal[]; total: number }>) => {
+    fetchProposalsSuccess(state, action: PayloadAction<Proposal[]>) {
+      state.proposals = action.payload;
       state.isLoading = false;
-      state.items = action.payload.items;
-      state.total = action.payload.total;
     },
-    fetchProposalsFailure: (state, action: PayloadAction<string>) => {
+    fetchProposalsFailure(state, action: PayloadAction<string>) {
+      state.error = action.payload;
       state.isLoading = false;
+    },
+    fetchProposalDetailRequest(state, _action: PayloadAction<string>) {
+      state.isLoading = true;
+      state.error = null;
+    },
+    fetchProposalDetailSuccess(state, action: PayloadAction<Proposal>) {
+      state.currentProposal = action.payload;
+      state.isLoading = false;
+    },
+    fetchProposalDetailFailure(state, action: PayloadAction<string>) {
+      state.error = action.payload;
+      state.isLoading = false;
+    },
+    fetchJobDetailRequest(state, _action: PayloadAction<string>) {
+      state.error = null;
+    },
+    fetchJobDetailSuccess(state, action: PayloadAction<ProposalJob>) {
+      state.currentJob = action.payload;
+      state.currentAgentRuns = action.payload.agentRuns;
+      state.agentStream = {};
+    },
+    fetchJobDetailFailure(state, action: PayloadAction<string>) {
       state.error = action.payload;
     },
-    createProposalRequest: (_state, _action: PayloadAction<ProposalCreatePayload>) => {},
-    createProposalSuccess: (state, action: PayloadAction<Proposal>) => {
-      state.items.unshift(action.payload);
-      state.total += 1;
+    setGenerating(state, action: PayloadAction<boolean>) {
+      state.isGenerating = action.payload;
     },
-    createProposalFailure: (_state, _action: PayloadAction<string>) => {},
-    updateProposalRequest: (_state, _action: PayloadAction<ProposalUpdatePayload>) => {},
-    updateProposalSuccess: (state, action: PayloadAction<Proposal>) => {
-      const idx = state.items.findIndex((p) => p.id === action.payload.id);
-      if (idx !== -1) state.items[idx] = action.payload;
-      if (state.detail?.proposal.id === action.payload.id) {
-        state.detail.proposal = action.payload;
+    setCurrentProposal(state, action: PayloadAction<Proposal | null>) {
+      state.currentProposal = action.payload;
+    },
+    updateAgentRun(
+      state,
+      action: PayloadAction<{ agentName: string; status: string; content?: string }>,
+    ) {
+      const { agentName, status, content } = action.payload;
+      const run = state.currentAgentRuns.find((r) => r.agentName === agentName);
+      if (run) {
+        run.status = status as ProposalAgentRun["status"];
+        if (content) run.content = content;
+      } else {
+        // SSE fired before we fetched job detail — insert a placeholder so
+        // the UI can still show the pill. The next fetch overwrites this.
+        state.currentAgentRuns.push({
+          id: agentName,
+          agentName,
+          displayName: agentName,
+          status: status as ProposalAgentRun["status"],
+          order: state.currentAgentRuns.length,
+        });
       }
     },
-    updateProposalFailure: (_state, _action: PayloadAction<string>) => {},
-    deleteProposalRequest: (_state, _action: PayloadAction<string>) => {},
-    deleteProposalSuccess: (state, action: PayloadAction<string>) => {
-      state.items = state.items.filter((p) => p.id !== action.payload);
-      state.total -= 1;
+    appendAgentToken(
+      state,
+      action: PayloadAction<{ agentName: string; token: string }>,
+    ) {
+      const { agentName, token } = action.payload;
+      state.agentStream[agentName] = (state.agentStream[agentName] || "") + token;
     },
-    deleteProposalFailure: (_state, _action: PayloadAction<string>) => {},
-    fetchProposalDetailRequest: (state, _action: PayloadAction<string>) => {
-      state.isLoading = true;
+    clearGeneration(state) {
+      state.currentJob = null;
+      state.currentAgentRuns = [];
+      state.agentStream = {};
+      state.isGenerating = false;
+      state.error = null;
     },
-    fetchProposalDetailSuccess: (state, action: PayloadAction<ProposalDetail>) => {
-      state.isLoading = false;
-      state.detail = action.payload;
-      state.versions = action.payload.versions;
-      state.activities = action.payload.activities;
-    },
-    fetchProposalDetailFailure: (state, action: PayloadAction<string>) => {
-      state.isLoading = false;
-      state.error = action.payload;
-    },
-    fetchStatsRequest: (_state) => {},
-    fetchStatsSuccess: (state, action: PayloadAction<ProposalStats>) => {
-      state.stats = action.payload;
-    },
-    fetchStatsFailure: (_state, _action: PayloadAction<string>) => {},
-    clearProposalDetail: (state) => {
-      state.detail = null;
-      state.versions = [];
-      state.activities = [];
-    },
-    clearError: (state) => { state.error = null; },
   },
 });
 
 export const {
-  fetchProposalsRequest, fetchProposalsSuccess, fetchProposalsFailure,
-  createProposalRequest, createProposalSuccess, createProposalFailure,
-  updateProposalRequest, updateProposalSuccess, updateProposalFailure,
-  deleteProposalRequest, deleteProposalSuccess, deleteProposalFailure,
-  fetchProposalDetailRequest, fetchProposalDetailSuccess, fetchProposalDetailFailure,
-  fetchStatsRequest, fetchStatsSuccess, fetchStatsFailure,
-  clearProposalDetail, clearError,
+  fetchProposalsRequest,
+  fetchProposalsSuccess,
+  fetchProposalsFailure,
+  fetchProposalDetailRequest,
+  fetchProposalDetailSuccess,
+  fetchProposalDetailFailure,
+  fetchJobDetailRequest,
+  fetchJobDetailSuccess,
+  fetchJobDetailFailure,
+  setGenerating,
+  setCurrentProposal,
+  updateAgentRun,
+  appendAgentToken,
+  clearGeneration,
 } = proposalsSlice.actions;
 
 export default proposalsSlice.reducer;

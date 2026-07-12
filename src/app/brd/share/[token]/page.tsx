@@ -80,10 +80,10 @@ export default function SharedBRDPage() {
   if (isGated && !brd.aiContent) {
     return (
       <PasswordGate
-        brdName={brd.name}
+        docName={brd.name}
         clientName={brd.clientName}
         onUnlock={(unlockedBrd) => {
-          setBrd(unlockedBrd);
+          setBrd(unlockedBrd as unknown as typeof brd);
           setIsGated(false);
         }}
       />
