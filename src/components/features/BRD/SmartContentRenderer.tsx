@@ -10,7 +10,7 @@
  *  - Markdown → passed to MarkdownRenderer as before.
  */
 
-import { MarkdownRenderer } from "@/components/features/ProposalIntelligence/MarkdownRenderer";
+import { MarkdownRenderer } from "@/components/shared/MarkdownRenderer";
 import "ckeditor5/ckeditor5-content.css";
 
 interface Props {

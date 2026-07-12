@@ -29,7 +29,6 @@ export interface RoleUpdatePayload {
 export const MODULE_OPTIONS = [
   { value: "leads", label: "Leads" },
   { value: "clients", label: "Clients" },
-  { value: "proposals", label: "Proposals" },
   { value: "users", label: "Users" },
 ] as const;
 

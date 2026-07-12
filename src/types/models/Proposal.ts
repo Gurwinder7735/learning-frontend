@@ -1,73 +1,72 @@
-export interface SummaryInfo {
-  clientProblem?: string | null;
-  businessGoals?: string | null;
-  projectVision?: string | null;
+export type ProposalPaymentType = "fixed_cost" | "cash_equity";
+export type ProposalStatus =
+  | "draft"
+  | "generating"
+  | "completed"
+  | "failed"
+  | "archived";
+
+export interface ProposalAgentRun {
+  id: string;
+  agentName: string;
+  displayName: string;
+  status: "pending" | "running" | "completed" | "failed";
+  outputFile?: string | null;
+  content?: string | null;
+  error?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  order: number;
 }
 
-export interface ScopeInfo {
-  includedFeatures: string[];
-  excludedFeatures: string[];
-  deliverables: string[];
-}
-
-export interface TimelinePhase {
-  name: string;
-  duration: string;
-}
-
-export interface TimelineInfo {
-  phases: TimelinePhase[];
-}
-
-export interface PricingInfo {
-  type: string;
-  cost: number;
+export interface ProposalJob {
+  id: string;
+  proposalId: string;
+  title?: string | null;
+  brdId: string;
+  clientId?: string | null;
+  clientName?: string | null;
+  paymentType: ProposalPaymentType;
+  equityPercentage?: number | null;
   currency: string;
-  paymentTerms?: string | null;
-}
-
-export interface ConsentRecord {
-  consentText: string;
-  consentVersion: string;
-  agreed: boolean;
-  agreedAt: string;
-  ipAddress: string;
-}
-
-export interface Signature {
-  role: "client" | "internal";
-  signerName: string;
-  signerEmail: string;
-  signedAt: string;
-  ipAddress: string;
-  userAgent: string;
-  signatureStyle: "typed" | "drawn";
-  consent?: ConsentRecord | null;
-  sessionId?: string | null;
-  currentHash?: string | null;
-  previousHash?: string | null;
+  maxBudget?: number | null;
+  advancePercentage?: number | null;
+  maxTimelineWeeks?: number | null;
+  extraNotes?: string | null;
+  status: "pending" | "running" | "completed" | "failed";
+  error?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  agentRuns: ProposalAgentRun[];
 }
 
 export interface Proposal {
   id: string;
   name: string;
+  title?: string | null;
+  brdId: string;
+  brdName?: string | null;
   clientId?: string | null;
   clientName?: string | null;
-  projectName?: string | null;
-  status: string;
-  version: number;
-  summary?: SummaryInfo | null;
-  scope?: ScopeInfo | null;
-  timeline?: TimelineInfo | null;
-  pricing?: PricingInfo | null;
-  assumptions: string[];
-  risks: string[];
+  paymentType: ProposalPaymentType;
+  equityPercentage?: number | null;
+  currency: string;
+  maxBudget?: number | null;
+  advancePercentage?: number | null;
+  maxTimelineWeeks?: number | null;
+  extraNotes?: string | null;
+  status: ProposalStatus;
   shareToken?: string | null;
-  createdBy?: string | null;
-  isAiGenerated?: boolean;
   proposalJobId?: string | null;
-  signingStatus: string;
-  signatures: Signature[];
+  aiContent?: Record<string, string> | null;
+  isPasswordProtected?: boolean;
+  preparedBy?: string | null;
+  documentDate?: string | null;
+  documentVersion?: string | null;
+  publishedVersionId?: string | null;
+  publishedVersionLabel?: string;
+  createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,83 +74,51 @@ export interface Proposal {
 export interface ProposalVersion {
   id: string;
   proposalId: string;
-  versionNumber: number;
-  snapshot: Record<string, unknown>;
-  createdBy?: string | null;
+  major: number;
+  minor: number;
+  label: string;                              // "1.0" / "1.1" / "2.0"
+  content?: Record<string, string> | null;    // omitted from list responses
+  coverMetadata: Record<string, string>;
+  inputsSnapshot?: Record<string, unknown> | null;
+  publishedBy: string;
+  note?: string | null;
+  publishedAt: string;
+}
+
+export interface ProposalComment {
+  id: string;
+  parentId?: string | null;
+  commenterName: string;
+  commenterEmail?: string | null;
+  content: string;
+  anchorY?: number | null;
+  anchorX?: number | null;
+  status: "open" | "resolved";
   createdAt: string;
 }
 
-export interface ProposalActivity {
-  id: string;
-  proposalId: string;
-  action: string;
-  description: string;
-  performedBy?: string | null;
-  metadata?: Record<string, unknown> | null;
-  createdAt: string;
+export interface ProposalSSEData {
+  type: string;
+  jobId: string;
+  data?: Record<string, unknown>;
 }
 
-export interface SignatureStatus {
-  signatures: Signature[];
-  signingStatus: string;
-  nextExpectedSigner: string | null;
-}
-
-export interface ProposalDetail {
-  proposal: Proposal;
-  versions: ProposalVersion[];
-  activities: ProposalActivity[];
-}
-
-export interface ProposalStats {
-  totalProposals: number;
-  draftCount: number;
-  sentCount: number;
-  approvedCount: number;
-  rejectedCount: number;
-  byStatus: Record<string, number>;
-}
-
-// -- Compliance / eSignature types --
-
-export interface AuditEvent {
-  id: string;
-  ceremonyId: string;
-  eventType: string;
-  actorEmail?: string | null;
-  actorRole?: string | null;
-  metadata: Record<string, unknown>;
-  ipAddress?: string | null;
-  currentHash: string;
-  previousHash?: string | null;
-  createdAt: string;
-}
-
-export interface EvidencePackage {
-  id: string;
-  ceremonyId: string;
-  proposalId: string;
-  packageHash: string;
-  generatedAt: string;
-  format: string;
-}
-
-export interface StartSessionResponse {
-  sessionId: string;
-  consentText: string;
-  consentVersion: string;
-  consentRequired: boolean;
-}
-
-export interface ConsentResponse {
-  consentVersion: string;
-  agreed: boolean;
-  agreedAt: string;
-}
-
-export interface VerifySignatureResult {
-  valid: boolean;
-  auditEvents: AuditEvent[];
-  ceremonyId?: string | null;
-  message: string;
+/**
+ * Request payload for POST /api/v1/proposals/generate. Every field
+ * matches the backend's ``ProposalGenerateRequest`` DTO (camelCase on
+ * the wire).
+ */
+export interface ProposalGenerateInput {
+  brdId: string;
+  name?: string;
+  title?: string;
+  clientId?: string;
+  clientName?: string;
+  paymentType: ProposalPaymentType;
+  equityPercentage?: number | null;
+  currency: string;
+  maxBudget?: number | null;
+  advancePercentage?: number | null;
+  maxTimelineWeeks?: number | null;
+  extraNotes?: string;
 }

@@ -3,18 +3,58 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Lock, LockOpen, Eye, EyeOff, AlertCircle } from "lucide-react";
-import type { BRD } from "@/types/models/BRD";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// Default endpoint targets the BRD share/verify route. Any other document
+// type (proposals, SOW, etc.) passes an explicit ``verifyEndpoint`` prop
+// so this component can gate them without any BRD coupling.
+const DEFAULT_VERIFY_ENDPOINT = (token: string) =>
+  `/api/v1/brd/brds/share/${token}/verify`;
+
+/**
+ * The password-protected document data returned by the /verify endpoint.
+ * We deliberately widen it to ``Record<string, unknown>`` so callers using
+ * different document shapes (BRD, Proposal, ...) can pass their own type
+ * through without loosening this component's contract.
+ */
+type UnlockedDoc = Record<string, unknown>;
+
 interface Props {
-  brdName: string;
+  /** Human-readable document name to show on the gate. */
+  docName: string;
+  /** Optional client / recipient name shown as subtext. */
   clientName?: string | null;
-  onUnlock: (brdData: BRD) => void;
+  /** Called after a successful unlock with the verify response's ``data``. */
+  onUnlock: (data: UnlockedDoc) => void;
+  /**
+   * Endpoint path (with leading ``/``) that receives the POST body
+   * ``{ password }`` and returns ``{ data: <full doc> }`` on success.
+   * Defaults to the BRD share/verify path for backward compatibility.
+   */
+  verifyEndpoint?: (token: string) => string;
+  /**
+   * SessionStorage key namespace so different document types don't
+   * cross-pollinate cached unlock state. Defaults to ``"brd"``.
+   */
+  storageNamespace?: string;
+
+  // Deprecated: use ``docName`` instead. Kept so existing callers keep
+  // compiling; the runtime falls back to this when ``docName`` is empty.
+  brdName?: string;
 }
 
-export function PasswordGate({ brdName, clientName, onUnlock }: Props) {
+export function PasswordGate({
+  docName,
+  brdName,
+  clientName,
+  onUnlock,
+  verifyEndpoint = DEFAULT_VERIFY_ENDPOINT,
+  storageNamespace = "brd",
+}: Props) {
   const { token } = useParams() as { token: string };
+
+  const displayName = docName || brdName || "Document";
 
   const [visitorName, setVisitorName] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +68,7 @@ export function PasswordGate({ brdName, clientName, onUnlock }: Props) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/brd/brds/share/${token}/verify`, {
+      const res = await fetch(`${API_BASE_URL}${verifyEndpoint(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
@@ -38,10 +78,13 @@ export function PasswordGate({ brdName, clientName, onUnlock }: Props) {
         setError(json.detail || "Incorrect password");
         return;
       }
-      sessionStorage.setItem(`brd_viewer_name_${token}`, visitorName.trim());
-      sessionStorage.setItem(`brd_unlocked_${token}`, "true");
+      sessionStorage.setItem(
+        `${storageNamespace}_viewer_name_${token}`,
+        visitorName.trim(),
+      );
+      sessionStorage.setItem(`${storageNamespace}_unlocked_${token}`, "true");
       setUnlocked(true);
-      setTimeout(() => onUnlock(json.data as BRD), 900);
+      setTimeout(() => onUnlock(json.data as UnlockedDoc), 900);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -92,7 +135,7 @@ export function PasswordGate({ brdName, clientName, onUnlock }: Props) {
 
         {/* Document info */}
         <div className="text-center mb-8">
-          <h1 className="text-lg font-semibold text-white mb-1 leading-snug px-4">{brdName}</h1>
+          <h1 className="text-lg font-semibold text-white mb-1 leading-snug px-4">{displayName}</h1>
           {clientName && <p className="text-xs text-zinc-500">{clientName}</p>}
           <p className="text-xs text-zinc-600 mt-3">
             This document is confidential and password protected.
