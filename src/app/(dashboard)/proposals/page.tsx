@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Lock,
   Globe,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -35,6 +36,10 @@ import {
 } from "@/store/modules/clients/clientsSelectors";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
 import { ProposalGenerationForm } from "@/components/features/Proposals/ProposalGenerationForm";
+import {
+  ManualProposalForm,
+  type ManualProposalInput,
+} from "@/components/features/Proposals/ManualProposalForm";
 import { storage } from "@/lib/utils/storage";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
@@ -197,6 +202,8 @@ export default function ProposalsPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [manualDrawerOpen, setManualDrawerOpen] = useState(false);
+  const [creatingManual, setCreatingManual] = useState(false);
 
   useEffect(() => {
     dispatch(fetchProposalsRequest());
@@ -265,6 +272,42 @@ export default function ProposalsPage() {
     }
   };
 
+  const handleCreateManual = async (data: ManualProposalInput) => {
+    setCreatingManual(true);
+    try {
+      const token = storage.getAccessToken();
+      const res = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.proposals.createManual}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(data),
+        },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || err?.message || `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      const proposalId = json.data?.proposalId;
+      setManualDrawerOpen(false);
+      message.success("Proposal created");
+      // Send the user straight to the editor — the whole point of the
+      // manual flow is that they finish the doc themselves.
+      if (proposalId) router.push(`${APP_ROUTES.proposals}/${proposalId}`);
+    } catch (e: unknown) {
+      Modal.error({
+        title: "Could not create proposal",
+        content: e instanceof Error ? e.message : "Something went wrong.",
+      });
+    } finally {
+      setCreatingManual(false);
+    }
+  };
+
   const completedCount = proposals.filter((p) => p.status === "completed").length;
   const publishedCount = proposals.filter((p) => p.publishedVersionLabel).length;
   const generatingCount = proposals.filter(
@@ -304,6 +347,12 @@ export default function ProposalsPage() {
           )}
           <div className="flex-1" />
           <Button
+            icon={<Pencil className="w-4 h-4" />}
+            onClick={() => setManualDrawerOpen(true)}
+          >
+            Create Manually
+          </Button>
+          <Button
             type="primary"
             icon={<Sparkles className="w-4 h-4" />}
             onClick={() => setDrawerOpen(true)}
@@ -327,18 +376,28 @@ export default function ProposalsPage() {
             No proposals yet
           </h3>
           <p className="text-sm text-zinc-400 mb-6 max-w-sm">
-            Pick a completed BRD, add commercial inputs, and let the AI pipeline
-            draft a professional client-ready proposal.
+            Pick a completed BRD and let the AI pipeline draft a
+            professional client-ready proposal — or start from an empty
+            document and write it yourself.
           </p>
-          <Button
-            type="primary"
-            size="large"
-            icon={<Sparkles className="w-4 h-4" />}
-            onClick={() => setDrawerOpen(true)}
-            className="!bg-zinc-900"
-          >
-            Generate your first proposal
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              size="large"
+              icon={<Pencil className="w-4 h-4" />}
+              onClick={() => setManualDrawerOpen(true)}
+            >
+              Create manually
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              icon={<Sparkles className="w-4 h-4" />}
+              onClick={() => setDrawerOpen(true)}
+              className="!bg-zinc-900"
+            >
+              Generate with AI
+            </Button>
+          </div>
         </div>
       ) : (
         <>
@@ -392,6 +451,23 @@ export default function ProposalsPage() {
           clientsLoading={clientsMeta.isLoading}
           onSubmit={handleGenerate}
           loading={generating}
+        />
+      </Drawer>
+
+      <Drawer
+        title="Create Manual Proposal"
+        width={520}
+        open={manualDrawerOpen}
+        onClose={() => {
+          if (!creatingManual) setManualDrawerOpen(false);
+        }}
+        destroyOnClose
+      >
+        <ManualProposalForm
+          clients={clients}
+          clientsLoading={clientsMeta.isLoading}
+          onSubmit={handleCreateManual}
+          loading={creatingManual}
         />
       </Drawer>
     </div>
