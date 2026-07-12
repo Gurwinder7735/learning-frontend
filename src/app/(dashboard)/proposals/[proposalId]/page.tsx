@@ -971,7 +971,13 @@ export default function ProposalDetailPage() {
                     </p>
                   </div>
 
-                  {primaryContent ? (
+                  {/* We render the DocumentPanel whenever the proposal
+                      has ANY ai_content bucket (even if the primary
+                      file happens to be empty) so manual proposals
+                      land in an editable state right away. Only
+                      proposals that never got past the pipeline show
+                      the empty placeholder. */}
+                  {proposal.aiContent != null ? (
                     <DocumentPanel
                       file={primaryFile}
                       label={

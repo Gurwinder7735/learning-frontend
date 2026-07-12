@@ -90,6 +90,7 @@ export const API_ENDPOINTS = {
   },
   proposals: {
     generate: "/api/v1/proposals/generate",
+    createManual: "/api/v1/proposals/manual",
     list: "/api/v1/proposals/proposals",
     detail: (id: string) => `/api/v1/proposals/proposals/${id}`,
     delete: (id: string) => `/api/v1/proposals/proposals/${id}`,
