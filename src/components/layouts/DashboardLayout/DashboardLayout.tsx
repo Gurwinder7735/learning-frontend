@@ -10,6 +10,8 @@ import {
   Users,
   Building2,
   Calendar,
+  LayoutDashboard,
+  BarChart2,
   Menu,
   X,
   Settings,
@@ -46,6 +48,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const can = auth.can;
 
   const navigation = [
+    { name: "Dashboard", href: APP_ROUTES.dashboard, icon: LayoutDashboard },
+    { name: "Reports", href: APP_ROUTES.reports, icon: BarChart2 },
     ...(can("leads", "view") ? [{ name: "Leads", href: APP_ROUTES.leads, icon: Target }] : []),
     ...(can("clients", "view")
       ? [{ name: "Clients", href: APP_ROUTES.clients, icon: Building2 }]

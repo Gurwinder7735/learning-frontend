@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Button, Input, Select, Space, Tag, Card, Row, Col, Statistic, Empty, Typography, Drawer, Form, Input as AntInput, Modal, Table, App } from "antd";
+import { Button, Input, Select, Space, Tag, Card, Row, Col, Statistic, Empty, Typography, Drawer, Form, Modal, Table, App } from "antd";
 import { Plus, Search, Target, TrendingUp, PhoneCall, CalendarCheck, FileCheck, CheckCircle2, XCircle, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
+import { AccountFormFields } from "@/components/features/AccountPanels/AccountFormFields";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +16,17 @@ import { selectLeads, selectLeadsMeta, selectLeadsStats } from "@/store/modules/
 import { fetchUsersRequest } from "@/store/modules/user/userSlice";
 import { selectUsers } from "@/store/modules/user/userSelectors";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
+
+const sourceLabels: Record<string, string> = {
+  referral: "Referral",
+  linkedin: "LinkedIn",
+  upwork: "Upwork",
+  website: "Website",
+  existing_client: "Existing Client",
+  partner: "Partner",
+  cold_outreach: "Cold Outreach",
+  other: "Other",
+};
 
 const statusColors: Record<string, string> = {
   new: "default",
@@ -30,19 +41,11 @@ const statusColors: Record<string, string> = {
   decision_pending: "volcano",
   on_hold: "default",
   won: "green",
+  // Post-conversion terminal state — same visual weight as ``won``
+  // because it's the successful outcome, just a clearer label.
+  converted_to_client: "green",
   lost: "red",
 };
-
-const sourceOptions = [
-  { value: "referral", label: "Referral" },
-  { value: "linkedin", label: "LinkedIn" },
-  { value: "upwork", label: "Upwork" },
-  { value: "website", label: "Website" },
-  { value: "existing_client", label: "Existing Client" },
-  { value: "partner", label: "Partner" },
-  { value: "cold_outreach", label: "Cold Outreach" },
-  { value: "other", label: "Other" },
-];
 
 export default function LeadsPage() {
   const { message } = App.useApp();
@@ -58,7 +61,6 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form] = Form.useForm();
-  const [selectedCountry, setSelectedCountry] = useState<string>();
   const debouncedSearch = useDebounce(search);
 
   const usersMap = useMemo(() => {
@@ -84,7 +86,13 @@ export default function LeadsPage() {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
-      dispatch(createLeadRequest(values));
+      // The unified form uses ``sourceType`` (matching the backend
+      // ``ClientModel.source_type``). The Leads endpoint also accepts
+      // a legacy ``source`` alias — we still send ``source`` here for
+      // any downstream code that reads that key, without depending on
+      // the alias to be honoured.
+      const payload = { ...values, source: values.sourceType };
+      dispatch(createLeadRequest(payload));
       setDrawerOpen(false);
       form.resetFields();
     } catch {
@@ -108,7 +116,20 @@ export default function LeadsPage() {
       dataIndex: "companyName",
       key: "companyName",
       render: (name: string, record: Lead) => (
-        <a onClick={() => router.push(`${APP_ROUTES.leads}/${record.id}`)} className="text-zinc-900 font-medium hover:text-blue-600 cursor-pointer">
+        // Converted records live on the client detail page — same
+        // ObjectId, different canonical home. The Leads list still
+        // shows them (with the "converted_to_client" status pill) but
+        // the click routes to /clients/{id}.
+        <a
+          onClick={() =>
+            router.push(
+              record.lifecycleStage === "client"
+                ? `${APP_ROUTES.clients}/${record.id}`
+                : `${APP_ROUTES.leads}/${record.id}`,
+            )
+          }
+          className="text-zinc-900 font-medium hover:text-blue-600 cursor-pointer"
+        >
           {name}
         </a>
       ),
@@ -141,7 +162,7 @@ export default function LeadsPage() {
       key: "source",
       width: 120,
       render: (source: string) => (
-        <span className="text-sm text-zinc-500">{sourceOptions.find((o) => o.value === source)?.label || source}</span>
+        <span className="text-sm text-zinc-500">{sourceLabels[source] || source}</span>
       ),
     },
     {
@@ -240,8 +261,11 @@ export default function LeadsPage() {
             { value: "negotiation", label: "Negotiation" },
             { value: "decision_pending", label: "Decision Pending" },
             { value: "on_hold", label: "On Hold" },
-            { value: "won", label: "Won" },
             { value: "lost", label: "Lost" },
+            // Legacy value kept for filtering older data; new records
+            // land on ``converted_to_client``.
+            { value: "won", label: "Won (legacy)" },
+            { value: "converted_to_client", label: "Converted to Client" },
           ]}
         />
         <div className="flex-1" />
@@ -273,7 +297,12 @@ export default function LeadsPage() {
             pagination={false}
             className="[&_.ant-table-row]:!cursor-pointer"
             onRow={(record) => ({
-              onClick: () => router.push(`${APP_ROUTES.leads}/${record.id}`),
+              onClick: () =>
+                router.push(
+                  record.lifecycleStage === "client"
+                    ? `${APP_ROUTES.clients}/${record.id}`
+                    : `${APP_ROUTES.leads}/${record.id}`,
+                ),
             })}
           />
         </Card>
@@ -293,41 +322,14 @@ export default function LeadsPage() {
         destroyOnClose
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="companyName" label="Company Name" rules={[{ required: true, message: "Required" }]}>
-            <AntInput placeholder="e.g. Acme Corp" />
-          </Form.Item>
-          <Form.Item name="contactPerson" label="Contact Person" rules={[{ required: true, message: "Required" }]}>
-            <AntInput placeholder="e.g. Jane Doe" />
-          </Form.Item>
-          <Form.Item name="email" label="Email">
-            <AntInput placeholder="jane@acme.com" />
-          </Form.Item>
-          <Form.Item name="phone" label="Phone">
-            <AntInput placeholder="+1 555-0123" />
-          </Form.Item>
-          <Form.Item name="linkedinProfile" label="LinkedIn Profile">
-            <AntInput placeholder="https://linkedin.com/in/..." />
-          </Form.Item>
-          <Form.Item name="source" label="Source">
-            <Select showSearch placeholder="Select source" options={sourceOptions} allowClear />
-          </Form.Item>
-          <Form.Item name="country" label="Country">
-            <Select showSearch placeholder="Select country" options={COUNTRY_OPTIONS} allowClear onChange={(val) => { setSelectedCountry(val); form.setFieldValue("timezone", undefined); }} />
-          </Form.Item>
-          <Form.Item name="timezone" label="Timezone">
-            <Select showSearch placeholder={selectedCountry ? "Select timezone for " + selectedCountry : "Select a country first"} options={getFilteredTimezones(selectedCountry)} allowClear disabled={!selectedCountry} />
-          </Form.Item>
-          {isAdmin && (
-            <Form.Item name="assignedTo" label="Assigned To">
-              <Select
-                showSearch
-                placeholder="Assign to user"
-                allowClear
-                optionFilterProp="label"
-                options={allUsers.map((u) => ({ value: u.id, label: u.name || u.email }))}
-              />
-            </Form.Item>
-          )}
+          <AccountFormFields
+            form={form}
+            userOptions={
+              isAdmin
+                ? allUsers.map((u) => ({ value: u.id, label: u.name || u.email }))
+                : undefined
+            }
+          />
         </Form>
       </Drawer>
     </div>

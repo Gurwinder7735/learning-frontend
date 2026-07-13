@@ -35,6 +35,8 @@ import {
   selectClientsMeta,
 } from "@/store/modules/clients/clientsSelectors";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
+import { selectLeads, selectLeadsMeta } from "@/store/modules/leads/leadsSelectors";
+import { fetchLeadsRequest } from "@/store/modules/leads/leadsSlice";
 import { ProposalGenerationForm } from "@/components/features/Proposals/ProposalGenerationForm";
 import {
   ManualProposalForm,
@@ -199,6 +201,16 @@ export default function ProposalsPage() {
   const brdsLoading = useAppSelector(selectBRDLoading);
   const clients = useAppSelector(selectClients);
   const clientsMeta = useAppSelector(selectClientsMeta);
+  const leads = useAppSelector(selectLeads);
+  const leadsMeta = useAppSelector(selectLeadsMeta);
+
+  const allAccounts = [
+    ...leads
+      .filter((l) => l.lifecycleStage !== "client")
+      .map((l) => ({ id: l.id, companyName: l.companyName, lifecycleStage: "lead" as const, originStage: "lead" as const })),
+    ...clients.map((c) => ({ id: c.id, companyName: c.companyName, lifecycleStage: "client" as const, originStage: c.originStage })),
+  ];
+  const accountsLoading = clientsMeta.isLoading || leadsMeta.isLoading;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -209,6 +221,7 @@ export default function ProposalsPage() {
     dispatch(fetchProposalsRequest());
     dispatch(fetchBRDsRequest());
     dispatch(fetchClientsRequest({ limit: 200 }));
+    dispatch(fetchLeadsRequest({ limit: 200 }));
   }, [dispatch]);
 
   const handleDelete = (proposal: Proposal) => {
@@ -447,8 +460,8 @@ export default function ProposalsPage() {
         <ProposalGenerationForm
           brds={brds}
           brdsLoading={brdsLoading}
-          clients={clients}
-          clientsLoading={clientsMeta.isLoading}
+          clients={allAccounts}
+          clientsLoading={accountsLoading}
           onSubmit={handleGenerate}
           loading={generating}
         />
@@ -464,8 +477,8 @@ export default function ProposalsPage() {
         destroyOnClose
       >
         <ManualProposalForm
-          clients={clients}
-          clientsLoading={clientsMeta.isLoading}
+          clients={allAccounts}
+          clientsLoading={accountsLoading}
           onSubmit={handleCreateManual}
           loading={creatingManual}
         />

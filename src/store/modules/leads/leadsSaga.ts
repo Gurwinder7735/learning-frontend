@@ -12,6 +12,7 @@ import {
   deleteLeadRequest, deleteLeadSuccess, deleteLeadFailure,
   fetchLeadDetailRequest, fetchLeadDetailSuccess, fetchLeadDetailFailure,
   updateLeadStatusRequest, updateLeadStatusSuccess, updateLeadStatusFailure,
+  revertLeadRequest, revertLeadSuccess, revertLeadFailure,
   addActivityRequest, addActivitySuccess, addActivityFailure,
   createMeetingRequest, createMeetingSuccess, createMeetingFailure,
   updateMeetingRequest, updateMeetingSuccess, updateMeetingFailure,
@@ -110,6 +111,28 @@ function* updateLeadStatusWorker(action: { type: string; payload: { id: string; 
     const message = error instanceof Error ? error.message : "Failed to update status";
     yield put(updateLeadStatusFailure(message));
     notification.error({ message: "Status update failed", description: message });
+  }
+}
+
+function* revertLeadWorker(action: { type: string; payload: { id: string; status: string } }) {
+  try {
+    const response: ApiResponse<Lead> = yield call(apiRequest, {
+      url: API_ENDPOINTS.leads.revert(action.payload.id),
+      method: "POST",
+      data: { status: action.payload.status },
+    });
+    yield put(revertLeadSuccess(response.data));
+    // Re-fetch the detail so the freshly-logged ``lead_reverted``
+    // activity shows up in the timeline immediately.
+    yield put(fetchLeadDetailRequest(action.payload.id));
+    notification.success({
+      message: "Lead reverted",
+      description: "The account is back in the leads list.",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to revert lead";
+    yield put(revertLeadFailure(message));
+    notification.error({ message: "Revert failed", description: message });
   }
 }
 
@@ -228,6 +251,7 @@ export function* leadsSaga() {
   yield takeLatest(deleteLeadRequest.type, deleteLeadWorker);
   yield takeLatest(fetchLeadDetailRequest.type, fetchLeadDetailWorker);
   yield takeLatest(updateLeadStatusRequest.type, updateLeadStatusWorker);
+  yield takeLatest(revertLeadRequest.type, revertLeadWorker);
   yield takeLatest(addActivityRequest.type, addActivityWorker);
   yield takeLatest(createMeetingRequest.type, createMeetingWorker);
   yield takeLatest(updateMeetingRequest.type, updateMeetingWorker);

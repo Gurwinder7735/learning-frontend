@@ -34,6 +34,8 @@ import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
 import { selectClients, selectClientsMeta } from "@/store/modules/clients/clientsSelectors";
+import { fetchLeadsRequest } from "@/store/modules/leads/leadsSlice";
+import { selectLeads, selectLeadsMeta } from "@/store/modules/leads/leadsSelectors";
 import {
   fetchBRDDetailRequest,
   fetchJobDetailRequest,
@@ -219,6 +221,15 @@ export default function BRDDetailPage() {
   const isLoading = useAppSelector(selectBRDLoading);
   const clients = useAppSelector(selectClients);
   const clientsMeta = useAppSelector(selectClientsMeta);
+  const leads = useAppSelector(selectLeads);
+  const leadsMeta = useAppSelector(selectLeadsMeta);
+  const allAccounts = [
+    ...leads
+      .filter((l) => l.lifecycleStage !== "client")
+      .map((l) => ({ id: l.id, companyName: l.companyName, isLead: true })),
+    ...clients.map((c) => ({ id: c.id, companyName: c.companyName, isLead: false })),
+  ];
+  const accountsLoading = clientsMeta.isLoading || leadsMeta.isLoading;
   const router = useRouter();
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -306,7 +317,7 @@ export default function BRDDetailPage() {
         body: JSON.stringify({
           client_id: meta.clientId || null,
           client_name: meta.clientId
-            ? (clients.find((c) => c.id === meta.clientId)?.companyName ?? null)
+            ? (allAccounts.find((a) => a.id === meta.clientId)?.companyName ?? null)
             : null,
           prepared_by: meta.preparedBy || null,
           document_date: meta.documentDate || null,
@@ -492,6 +503,7 @@ export default function BRDDetailPage() {
     dispatch(clearGeneration());
     dispatch(fetchBRDDetailRequest(brdId));
     dispatch(fetchClientsRequest({ limit: 200 }));
+    dispatch(fetchLeadsRequest({ limit: 200 }));
   }, [brdId, dispatch]);
 
   useEffect(() => {
@@ -849,11 +861,14 @@ export default function BRDDetailPage() {
                 allowClear
                 showSearch
                 style={{ width: "100%" }}
-                loading={clientsMeta.isLoading}
+                loading={accountsLoading}
                 filterOption={(input, option) =>
                   (option?.label as string ?? "").toLowerCase().includes(input.toLowerCase())
                 }
-                options={clients.map((c) => ({ value: c.id, label: c.companyName }))}
+                options={allAccounts.map((a) => ({
+                  value: a.id,
+                  label: a.isLead ? `${a.companyName} (Lead)` : a.companyName,
+                }))}
               />
             </div>
             <div>

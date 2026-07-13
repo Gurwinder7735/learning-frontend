@@ -1,27 +1,64 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { Button, Input, Select, Space, Tag, Card, Row, Col, Statistic, Empty, Typography, Drawer, Form, Input as AntInput, Modal, App } from "antd";
-import { Plus, Search, Building2, Globe, Briefcase, MapPin, RefreshCw, MoreHorizontal, Edit3, Trash2, Users, ArrowUpRight, Mail, Phone } from "lucide-react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import {
+  App,
+  Button,
+  Card,
+  Col,
+  Drawer,
+  Form,
+  Input,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
+import {
+  Briefcase,
+  Building2,
+  CheckCircle2,
+  MapPin,
+  PauseCircle,
+  Plus,
+  Trash2,
+  TrendingUp,
+  Users,
+  XCircle,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { INDUSTRY_OPTIONS, COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
+import { AccountFormFields } from "@/components/features/AccountPanels/AccountFormFields";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Client } from "@/types/models/Client";
-import { fetchClientsRequest, createClientRequest, deleteClientRequest, fetchStatsRequest, clearClientDetail } from "@/store/modules/clients/clientsSlice";
-import { selectClients, selectClientsMeta, selectClientsStats } from "@/store/modules/clients/clientsSelectors";
+import {
+  fetchClientsRequest,
+  createClientRequest,
+  deleteClientRequest,
+  fetchStatsRequest,
+} from "@/store/modules/clients/clientsSlice";
+import {
+  selectClients,
+  selectClientsMeta,
+  selectClientsStats,
+} from "@/store/modules/clients/clientsSelectors";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
 
-const statusColors: Record<string, string> = {
+const STATUS_COLOR: Record<string, string> = {
   active: "green",
   on_hold: "orange",
   completed: "blue",
   inactive: "red",
 };
 
-const sourceLabels: Record<string, string> = {
+const SOURCE_LABELS: Record<string, string> = {
   referral: "Referral",
   linkedin: "LinkedIn",
   upwork: "Upwork",
@@ -33,7 +70,7 @@ const sourceLabels: Record<string, string> = {
 };
 
 export default function ClientsPage() {
-  const { message } = App.useApp();
+  const router = useRouter();
   const dispatch = useAppDispatch();
   const clients = useAppSelector(selectClients);
   const meta = useAppSelector(selectClientsMeta);
@@ -43,7 +80,6 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form] = Form.useForm();
-  const [selectedCountry, setSelectedCountry] = useState<string>();
   const debouncedSearch = useDebounce(search);
 
   useEffect(() => {
@@ -61,46 +97,185 @@ export default function ClientsPage() {
       setDrawerOpen(false);
       form.resetFields();
     } catch {
-      // validation failed
+      // validation error — antd shows inline messages
     }
   };
 
-  const handleDelete = (client: Client) => {
+  const handleDelete = (client: Client, e: React.MouseEvent) => {
+    e.stopPropagation();
     Modal.confirm({
       title: "Delete client",
-      content: `Are you sure you want to delete ${client.companyName}? This action cannot be undone.`,
+      content: `Delete "${client.companyName}"? This cannot be undone.`,
       okText: "Delete",
       okButtonProps: { danger: true },
       onOk: () => dispatch(deleteClientRequest(client.id)),
     });
   };
 
-  const filteredClients = useMemo(() => clients, [clients]);
+  const columns = [
+    {
+      title: "Company",
+      dataIndex: "companyName",
+      key: "companyName",
+      render: (name: string, record: Client) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0">
+            <Building2 className="w-3.5 h-3.5 text-zinc-500" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-zinc-900 truncate">{name}</div>
+            {record.email && (
+              <div className="text-xs text-zinc-400 truncate">{record.email}</div>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      width: 120,
+      render: (status: string) => (
+        <Tag
+          color={STATUS_COLOR[status] || "default"}
+          className="!rounded-full !px-3 !py-0.5 !text-xs"
+        >
+          {status.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+        </Tag>
+      ),
+    },
+    {
+      title: "Industry",
+      dataIndex: "industry",
+      key: "industry",
+      width: 140,
+      render: (industry: string) =>
+        industry ? (
+          <div className="flex items-center gap-1.5 text-sm text-zinc-500">
+            <Briefcase className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{industry}</span>
+          </div>
+        ) : (
+          <span className="text-zinc-300">—</span>
+        ),
+    },
+    {
+      title: "Country",
+      dataIndex: "country",
+      key: "country",
+      width: 130,
+      render: (country: string) =>
+        country ? (
+          <div className="flex items-center gap-1.5 text-sm text-zinc-500">
+            <MapPin className="w-3.5 h-3.5 shrink-0" />
+            <span>{country}</span>
+          </div>
+        ) : (
+          <span className="text-zinc-300">—</span>
+        ),
+    },
+    {
+      title: "Source",
+      dataIndex: "sourceType",
+      key: "sourceType",
+      width: 130,
+      render: (src: string) => (
+        <span className="text-sm text-zinc-500">
+          {SOURCE_LABELS[src] || src || "—"}
+        </span>
+      ),
+    },
+    {
+      title: "Contacts",
+      dataIndex: "contactCount",
+      key: "contactCount",
+      width: 90,
+      render: (n: number) => (
+        <div className="flex items-center gap-1.5 text-sm text-zinc-500">
+          <Users className="w-3.5 h-3.5" />
+          <span>{n}</span>
+        </div>
+      ),
+    },
+    {
+      title: "Since",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      width: 110,
+      render: (date: string) => (
+        <span className="text-sm text-zinc-400">
+          {new Date(date).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      title: "",
+      key: "actions",
+      width: 48,
+      render: (_: unknown, record: Client) => (
+        <Tooltip title="Delete">
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<Trash2 className="w-3.5 h-3.5" />}
+            onClick={(e) => handleDelete(record, e)}
+          />
+        </Tooltip>
+      ),
+    },
+  ];
 
   return (
     <div>
-      <PageHeader title="Client Hub" subtitle="Manage your clients, contacts, and relationships in one place." />
+      <PageHeader
+        title="Clients"
+        subtitle="Manage your clients, contacts, and ongoing relationships."
+      />
 
       {stats && (
         <Row gutter={[16, 16]} className="mb-6">
           <Col xs={12} sm={6}>
             <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic title="Total Clients" value={stats.totalClients} prefix={<Building2 className="w-4 h-4 text-zinc-400 mr-1" />} valueStyle={{ fontSize: 24 }} />
+              <Statistic
+                title="Total"
+                value={stats.totalClients}
+                prefix={<Building2 className="w-4 h-4 text-zinc-400 mr-1" />}
+                valueStyle={{ fontSize: 20 }}
+              />
             </Card>
           </Col>
           <Col xs={12} sm={6}>
             <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic title="Active" value={stats.activeClients} prefix={<Users className="w-4 h-4 text-green-500 mr-1" />} valueStyle={{ fontSize: 24, color: "#16a34a" }} />
+              <Statistic
+                title="Active"
+                value={stats.activeClients}
+                prefix={<CheckCircle2 className="w-4 h-4 text-green-500 mr-1" />}
+                valueStyle={{ fontSize: 20, color: "#16a34a" }}
+              />
             </Card>
           </Col>
           <Col xs={12} sm={6}>
             <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic title="New This Month" value={stats.newThisMonth} prefix={<RefreshCw className="w-4 h-4 text-blue-500 mr-1" />} valueStyle={{ fontSize: 24 }} />
+              <Statistic
+                title="New This Month"
+                value={stats.newThisMonth}
+                prefix={<TrendingUp className="w-4 h-4 text-blue-500 mr-1" />}
+                valueStyle={{ fontSize: 20, color: "#3b82f6" }}
+              />
             </Card>
           </Col>
           <Col xs={12} sm={6}>
             <Card className="!rounded-xl !border-zinc-200 !shadow-sm" size="small">
-              <Statistic title="Recently Added" value={stats.recentlyAdded} prefix={<ArrowUpRight className="w-4 h-4 text-orange-500 mr-1" />} valueStyle={{ fontSize: 24 }} />
+              <Statistic
+                title="On Hold"
+                value={
+                  clients.filter((c) => c.status === "on_hold").length
+                }
+                prefix={<PauseCircle className="w-4 h-4 text-orange-500 mr-1" />}
+                valueStyle={{ fontSize: 20, color: "#ea580c" }}
+              />
             </Card>
           </Col>
         </Row>
@@ -114,9 +289,9 @@ export default function ClientsPage() {
           className="max-w-xs"
         />
         <Select
-          placeholder="Status"
+          placeholder="Filter by Status"
           allowClear
-          style={{ width: 140 }}
+          style={{ width: 170 }}
           onChange={(val) => setStatusFilter(val)}
           options={[
             { value: "active", label: "Active" },
@@ -126,148 +301,84 @@ export default function ClientsPage() {
           ]}
         />
         <div className="flex-1" />
-        <Button type="primary" icon={<Plus className="w-4 h-4" />} onClick={() => setDrawerOpen(true)}>
+        <Button
+          type="primary"
+          icon={<Plus className="w-4 h-4" />}
+          onClick={() => setDrawerOpen(true)}
+        >
           Add Client
         </Button>
       </div>
 
-      {meta.isLoading && filteredClients.length === 0 ? (
+      {meta.isLoading && clients.length === 0 ? (
         <div className="flex justify-center py-20">
           <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
         </div>
-      ) : filteredClients.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-          <Building2 className="w-16 h-16 mb-4 text-zinc-300" />
-          <Typography.Text className="text-lg font-medium text-zinc-500">No clients yet</Typography.Text>
-          <Typography.Text className="text-sm text-zinc-400 mb-4">Add your first client to get started.</Typography.Text>
-          <Button type="primary" icon={<Plus className="w-4 h-4" />} onClick={() => setDrawerOpen(true)}>
+      ) : clients.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-100 flex items-center justify-center mb-4">
+            <Building2 className="w-8 h-8 text-zinc-400" />
+          </div>
+          <Typography.Text className="text-base font-medium text-zinc-600 mb-1 block">
+            No clients yet
+          </Typography.Text>
+          <Typography.Text className="text-sm text-zinc-400 mb-5 block">
+            Add your first client to get started.
+          </Typography.Text>
+          <Button
+            type="primary"
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => setDrawerOpen(true)}
+          >
             Add Client
           </Button>
         </div>
       ) : (
-        <Row gutter={[16, 16]}>
-          {filteredClients.map((client) => (
-            <Col xs={24} sm={12} lg={8} xl={6} key={client.id}>
-              <Link href={`${APP_ROUTES.clients}/${client.id}`} className="block group">
-                <Card
-                  className="!rounded-xl !border-zinc-200 !shadow-sm hover:!shadow-md hover:!border-zinc-300 transition-all cursor-pointer !h-full"
-                  actions={[
-                    <Button key="edit" type="text" icon={<Edit3 className="w-4 h-4" />} onClick={(e) => { e.preventDefault(); }} />,
-                    <Button key="delete" type="text" danger icon={<Trash2 className="w-4 h-4" />} onClick={(e) => { e.preventDefault(); handleDelete(client); }} />,
-                  ]}
-                >
-                  <Card.Meta
-                    avatar={
-                      <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0 group-hover:bg-zinc-200 transition-colors">
-                        <Building2 className="w-5 h-5 text-zinc-500" />
-                      </div>
-                    }
-                    title={
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-zinc-900 truncate">{client.companyName}</span>
-                        <Tag color={statusColors[client.status] || "default"} className="!text-[10px] !px-1.5 !py-0 !leading-none !m-0 !rounded-full shrink-0">
-                          {client.status.replace("_", " ")}
-                        </Tag>
-                      </div>
-                    }
-                    description={
-                      <div className="space-y-1 mt-2">
-                        {client.email && (
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                            <Mail className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{client.email}</span>
-                          </div>
-                        )}
-                        {client.phone && (
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                            <Phone className="w-3 h-3 shrink-0" />
-                            <span>{client.phone}</span>
-                          </div>
-                        )}
-                        {client.industry && (
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                            <Briefcase className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{client.industry}</span>
-                          </div>
-                        )}
-                        {client.country && (
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                            <MapPin className="w-3 h-3 shrink-0" />
-                            <span>{client.country}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5 text-xs text-zinc-400 pt-1">
-                          <Users className="w-3 h-3" />
-                          <span>{client.contactCount} contact{client.contactCount !== 1 ? "s" : ""}</span>
-                        </div>
-                        <div className="text-[11px] text-zinc-400 pt-1">
-                          {sourceLabels[client.sourceType] || client.sourceType}
-                        </div>
-                      </div>
-                    }
-                  />
-                </Card>
-              </Link>
-            </Col>
-          ))}
-        </Row>
+        <Card
+          className="!rounded-xl !border-zinc-200 !shadow-sm !overflow-hidden"
+          styles={{ body: { padding: 0 } }}
+        >
+          <Table
+            dataSource={clients}
+            columns={columns}
+            rowKey="id"
+            loading={meta.isLoading}
+            pagination={false}
+            className="[&_.ant-table-row]:!cursor-pointer"
+            onRow={(record) => ({
+              onClick: () => router.push(`${APP_ROUTES.clients}/${record.id}`),
+            })}
+          />
+        </Card>
       )}
 
       <Drawer
         title="Add Client"
         width={560}
         open={drawerOpen}
-        onClose={() => { setDrawerOpen(false); form.resetFields(); }}
+        onClose={() => {
+          setDrawerOpen(false);
+          form.resetFields();
+        }}
         footer={
           <Space className="w-full justify-end">
-            <Button onClick={() => { setDrawerOpen(false); form.resetFields(); }}>Cancel</Button>
-            <Button type="primary" onClick={handleCreate}>Create Client</Button>
+            <Button
+              onClick={() => {
+                setDrawerOpen(false);
+                form.resetFields();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="primary" onClick={handleCreate}>
+              Create Client
+            </Button>
           </Space>
         }
         destroyOnClose
       >
-        <Form form={form} layout="vertical">
-          <Form.Item name="companyName" label="Company Name" rules={[{ required: true, message: "Required" }]}>
-            <AntInput placeholder="e.g. Acme Corp" />
-          </Form.Item>
-          <Form.Item name="email" label="Email">
-            <AntInput placeholder="contact@acme.com" />
-          </Form.Item>
-          <Form.Item name="phone" label="Phone">
-            <AntInput placeholder="+1 555-0123" />
-          </Form.Item>
-          <Form.Item name="website" label="Website">
-            <AntInput placeholder="https://example.com" />
-          </Form.Item>
-          <Form.Item name="industry" label="Industry">
-            <Select showSearch placeholder="Select industry" options={INDUSTRY_OPTIONS} allowClear />
-          </Form.Item>
-          <Form.Item name="country" label="Country">
-            <Select showSearch placeholder="Select country" options={COUNTRY_OPTIONS} allowClear onChange={(val) => { setSelectedCountry(val); form.setFieldValue("timezone", undefined); }} />
-          </Form.Item>
-          <Form.Item name="timezone" label="Timezone">
-            <Select showSearch placeholder={selectedCountry ? "Select timezone for " + selectedCountry : "Select a country first"} options={getFilteredTimezones(selectedCountry)} allowClear disabled={!selectedCountry} />
-          </Form.Item>
-          <Form.Item name="sourceType" label="Source" initialValue="other">
-            <Select
-              options={[
-                { value: "referral", label: "Referral" },
-                { value: "linkedin", label: "LinkedIn" },
-                { value: "upwork", label: "Upwork" },
-                { value: "website", label: "Website" },
-                { value: "existing_client", label: "Existing Client" },
-                { value: "partner", label: "Partner" },
-                { value: "cold_outreach", label: "Cold Outreach" },
-                { value: "other", label: "Other" },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="referredBy" label="Referred By">
-            <AntInput placeholder="Name or company" />
-          </Form.Item>
-          <Form.Item name="internalNotes" label="Internal Notes">
-            <AntInput.TextArea rows={3} placeholder="Any internal notes..." />
-          </Form.Item>
+        <Form form={form} layout="vertical" initialValues={{ sourceType: "other" }}>
+          <AccountFormFields form={form} />
         </Form>
       </Drawer>
     </div>

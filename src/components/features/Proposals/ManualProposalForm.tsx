@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button, Input, Select, Typography } from "antd";
 import { Loader2, Pencil } from "lucide-react";
 
-import type { Client } from "@/types/models/Client";
+import type { AccountOption } from "@/types/models/Client";
 
 /**
  * Manual (non-AI) proposal creation form.
@@ -22,7 +22,7 @@ export interface ManualProposalInput {
 }
 
 interface Props {
-  clients: Client[];
+  clients: AccountOption[];
   clientsLoading: boolean;
   onSubmit: (data: ManualProposalInput) => Promise<void>;
   loading: boolean;
@@ -84,8 +84,14 @@ export function ManualProposalForm({
           filterOption={(input, option) =>
             (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
           }
-          notFoundContent={clientsLoading ? "Loading..." : "No clients found"}
-          options={clients.map((c) => ({ value: c.id, label: c.companyName }))}
+          notFoundContent={clientsLoading ? "Loading..." : "No accounts found"}
+          options={clients.map((c) => ({
+            value: c.id,
+            label:
+              (c.lifecycleStage ?? c.originStage) === "lead"
+                ? `${c.companyName} (Lead)`
+                : c.companyName,
+          }))}
         />
       </div>
 

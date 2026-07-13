@@ -2,16 +2,16 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, App, Timeline, DatePicker, Switch } from "antd";
+import { Button, Tag, Card, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, Drawer, App, DatePicker, Switch } from "antd";
 import DocumentList from "@/components/documents/DocumentList";
-import { ArrowLeft, Target, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, Calendar, Clock, MessageSquare, Flag, Save, User, Video, Loader2, FileText } from "lucide-react";
+import { ArrowLeft, Target, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, Calendar, Clock, MessageSquare, Flag, Save, User, Video, Loader2, FileText, MapPin, X } from "lucide-react";
 import { COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import { useAuth } from "@/hooks/useAuth";
 import {
   fetchLeadDetailRequest, clearLeadDetail, updateLeadRequest, deleteLeadRequest,
-  updateLeadStatusRequest, addActivityRequest,
+  updateLeadStatusRequest, revertLeadRequest, addActivityRequest,
 } from "@/store/modules/leads/leadsSlice";
 import { selectLeadDetail, selectLeadActivities, selectLeadMeetings } from "@/store/modules/leads/leadsSelectors";
 import { fetchUsersRequest } from "@/store/modules/user/userSlice";
@@ -41,6 +41,9 @@ const statusColors: Record<string, string> = {
   on_hold: "default",
   won: "green",
   lost: "red",
+  // Post-conversion terminal status. Kept green to signal the lead
+  // journey landed successfully.
+  converted_to_client: "green",
 };
 
 const sourceOptions = [
@@ -66,8 +69,12 @@ const statusOptions = [
   { value: "negotiation", label: "Negotiation" },
   { value: "decision_pending", label: "Decision Pending" },
   { value: "on_hold", label: "On Hold" },
-  { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
+  // Terminal — selecting this triggers the /convert endpoint on the
+  // backend, which flips lifecycle_stage to "client" on the same
+  // record. The old ``won`` value stays supported server-side for
+  // backward compatibility.
+  { value: "converted_to_client", label: "Converted to Client" },
 ];
 
 const activityTypeIcons: Record<string, React.ReactNode> = {
@@ -110,6 +117,7 @@ export default function LeadDetailPage() {
 
   const [salesPrepSections, setSalesPrepSections] = useState<SalesPrepSection[]>([]);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   const [meetingDeleting, setMeetingDeleting] = useState<string | null>(null);
@@ -127,6 +135,18 @@ export default function LeadDetailPage() {
       dispatch(fetchUsersRequest({ pageSize: 100 }));
     }
   }, [isAdmin, dispatch]);
+
+  // Canonical-home redirect. If the loaded lead has already been
+  // converted (``lifecycleStage=client``), the client detail page is
+  // the canonical home for the account — everything the lead detail
+  // used to show is now available there under the new tabs. We
+  // ``router.replace`` (rather than ``push``) so the browser Back
+  // button doesn't bounce the user right back to /leads/{id}.
+  useEffect(() => {
+    if (lead && lead.lifecycleStage === "client") {
+      router.replace(`${APP_ROUTES.clients}/${lead.id}`);
+    }
+  }, [lead?.id, lead?.lifecycleStage, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (lead?.salesPrepSections !== undefined) {
@@ -177,10 +197,70 @@ export default function LeadDetailPage() {
     });
   };
 
+  /**
+   * Three transitions can happen from the status dropdown:
+   *
+   *   1. Forward conversion — currently in lead-stage, target is
+   *      ``converted_to_client``. Confirms as "Convert to client".
+   *   2. Revert — record is already converted and the user picks any
+   *      non-terminal lead status. This will unpublish the record
+   *      from the Clients view (same ObjectId; downstream artefacts
+   *      stay linked). Confirmed via a distinct danger-styled modal.
+   *   3. Plain funnel move — regular status update within lead-stage.
+   */
   const handleStatusChange = (status: string) => {
+    if (!lead) return;
+    const label = statusOptions.find((s) => s.value === status)?.label ?? status;
+    const isCurrentlyConverted = lead.lifecycleStage === "client";
+    const isTargetTerminal = status === "converted_to_client" || status === "won";
+
+    // Path 1 — forward conversion.
+    if (!isCurrentlyConverted && isTargetTerminal) {
+      Modal.confirm({
+        title: "Convert to client?",
+        content:
+          "The account will appear in the Clients module. Documents, " +
+          "meetings, and BRDs linked to this lead will follow the same " +
+          "record.",
+        okText: "Convert",
+        okButtonProps: { className: "bg-emerald-600" },
+        onOk: () => dispatch(updateLeadStatusRequest({ id: leadId, status })),
+      });
+      return;
+    }
+
+    // Path 2 — revert. The account is currently client-stage and the
+    // user picked a lead status. Route through the dedicated revert
+    // endpoint via ``revertLeadRequest`` for a clearer audit trail.
+    if (isCurrentlyConverted && !isTargetTerminal) {
+      Modal.confirm({
+        title: "Revert this lead?",
+        content: (
+          <div className="space-y-2 text-sm">
+            <p>
+              This account will move back to <strong>{label}</strong> in the
+              Leads module and disappear from the Clients view.
+            </p>
+            <p className="text-zinc-500">
+              The record itself and everything linked to it &mdash;
+              documents, meetings, BRDs, proposals, agreements, SOWs
+              &mdash; stay attached. Nothing is deleted, only the
+              lifecycle marker changes.
+            </p>
+          </div>
+        ),
+        okText: "Revert",
+        okType: "danger",
+        onOk: () => dispatch(revertLeadRequest({ id: leadId, status })),
+      });
+      return;
+    }
+
+    // Path 3 — plain in-lead status change. Or "stay converted" (a
+    // no-op the user is warned about but permitted).
     Modal.confirm({
       title: "Update status",
-      content: `Change status to "${statusOptions.find((s) => s.value === status)?.label}"?`,
+      content: `Change status to "${label}"?`,
       okText: "Update",
       onOk: () => dispatch(updateLeadStatusRequest({ id: leadId, status })),
     });
@@ -295,74 +375,186 @@ export default function LeadDetailPage() {
             key: "overview",
             label: "Overview",
             children: (
-              <div className="space-y-6">
-                <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title="Contact Information">
-                  <Descriptions column={{ xs: 1, sm: 2 }} colon={false} className="[&_.ant-descriptions-item-content]:text-zinc-900">
-                    <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Contact Person</span>}>
-                      {lead.contactPerson}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Status</span>}>
-                      <Tag color={statusColors[lead.status] || "default"} className="!rounded-full">{lead.status.replace("_", " ")}</Tag>
-                    </Descriptions.Item>
-                    {lead.email && (
-                      <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Email</span>}>
-                        <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline inline-flex items-center gap-1">
-                          <Mail className="w-3 h-3" /> {lead.email}
-                        </a>
-                      </Descriptions.Item>
-                    )}
-                    {lead.phone && (
-                      <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Phone</span>}>
-                        <a href={`tel:${lead.phone}`} className="text-zinc-900 hover:text-zinc-600 inline-flex items-center gap-1">
-                          <Phone className="w-3 h-3" /> {lead.phone}
-                        </a>
-                      </Descriptions.Item>
-                    )}
-                    {lead.linkedinProfile && (
-                      <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">LinkedIn</span>}>
-                        <a href={lead.linkedinProfile} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">
-                          <ExternalLink className="w-3 h-3" /> View Profile
-                        </a>
-                      </Descriptions.Item>
-                    )}
-                    <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Source</span>}>
-                      {sourceOptions.find((o) => o.value === lead.source)?.label || lead.source}
-                    </Descriptions.Item>
-                    {lead.country && (
-                      <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Country</span>}>
-                        {lead.country}
-                      </Descriptions.Item>
-                    )}
-                    {lead.timezone && (
-                      <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Timezone</span>}>
-                        {lead.timezone}
-                      </Descriptions.Item>
-                    )}
-                    <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Created</span>}>
-                      {new Date(lead.createdAt).toLocaleDateString()}
-                    </Descriptions.Item>
-                    {lead.assignedTo && (
-                      <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Assigned To</span>}>
-                        <span className="inline-flex items-center gap-1 text-zinc-900">
-                          <User className="w-3 h-3 text-zinc-400" />
-                          {usersMap[lead.assignedTo] || "Unknown"}
-                        </span>
-                      </Descriptions.Item>
-                    )}
-                  </Descriptions>
-                </Card>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* ── Primary contact card ──────────────────────────── */}
+                <div className="lg:col-span-1 flex flex-col gap-4">
+                  <Card className="!rounded-xl !border-zinc-200 !shadow-sm">
+                    {/* Avatar + name */}
+                    <div className="flex flex-col items-center text-center pb-4 border-b border-zinc-100">
+                      <div className="w-16 h-16 rounded-2xl bg-zinc-100 border border-zinc-200 flex items-center justify-center mb-3">
+                        <User className="w-8 h-8 text-zinc-400" />
+                      </div>
+                      <p className="text-base font-semibold text-zinc-900 leading-tight">
+                        {lead.contactPerson || "—"}
+                      </p>
+                      <p className="text-sm text-zinc-500 mt-0.5">{lead.companyName}</p>
+                      <Tag
+                        color={statusColors[lead.status] || "default"}
+                        className="!rounded-full !px-3 !py-0.5 !text-xs mt-2"
+                      >
+                        {lead.status.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+                      </Tag>
+                    </div>
 
-                {lead.clientId && (
-                  <Card className="!rounded-xl !border-zinc-200 !shadow-sm !bg-green-50/50" size="small">
-                    <div className="flex items-center gap-2 text-sm text-green-700">
-                      <Target className="w-4 h-4" />
-                      <span>Converted to client</span>
-                      <Button type="link" size="small" className="!p-0 !h-auto" onClick={() => router.push(`${APP_ROUTES.clients}/${lead.clientId}`)}>
-                        View Client Profile &rarr;
-                      </Button>
+                    {/* Quick-action buttons */}
+                    <div className="flex gap-2 pt-4 pb-2">
+                      {lead.email && (
+                        <a href={`mailto:${lead.email}`} className="flex-1">
+                          <Button
+                            block
+                            icon={<Mail className="w-3.5 h-3.5" />}
+                            size="small"
+                            className="!rounded-lg !text-xs !border-zinc-200 !text-zinc-600"
+                          >
+                            Email
+                          </Button>
+                        </a>
+                      )}
+                      {lead.phone && (
+                        <a href={`tel:${lead.phone}`} className="flex-1">
+                          <Button
+                            block
+                            icon={<Phone className="w-3.5 h-3.5" />}
+                            size="small"
+                            className="!rounded-lg !text-xs !border-zinc-200 !text-zinc-600"
+                          >
+                            Call
+                          </Button>
+                        </a>
+                      )}
+                      {lead.linkedinProfile && (
+                        <a href={lead.linkedinProfile} target="_blank" rel="noopener noreferrer" className="flex-1">
+                          <Button
+                            block
+                            icon={<ExternalLink className="w-3.5 h-3.5" />}
+                            size="small"
+                            className="!rounded-lg !text-xs !border-zinc-200 !text-zinc-600"
+                          >
+                            LinkedIn
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Contact detail rows */}
+                    <div className="space-y-3 pt-2">
+                      {lead.email && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <Mail className="w-3.5 h-3.5 text-zinc-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Email</p>
+                            <p className="text-sm text-zinc-800 truncate">{lead.email}</p>
+                          </div>
+                        </div>
+                      )}
+                      {lead.phone && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <Phone className="w-3.5 h-3.5 text-zinc-500" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Phone</p>
+                            <p className="text-sm text-zinc-800">{lead.phone}</p>
+                          </div>
+                        </div>
+                      )}
+                      {lead.linkedinProfile && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">LinkedIn</p>
+                            <a
+                              href={lead.linkedinProfile}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:underline truncate block"
+                            >
+                              View Profile
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </Card>
-                )}
+                </div>
+
+                {/* ── Account details ───────────────────────────────── */}
+                <div className="lg:col-span-2 flex flex-col gap-4">
+                  <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title="Account Details">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+                      {[
+                        {
+                          label: "Source",
+                          value: sourceOptions.find((o) => o.value === lead.source)?.label || lead.source,
+                          icon: <Flag className="w-3.5 h-3.5 text-zinc-400" />,
+                        },
+                        {
+                          label: "Country",
+                          value: lead.country,
+                          icon: <MapPin className="w-3.5 h-3.5 text-zinc-400" />,
+                        },
+                        {
+                          label: "Timezone",
+                          value: lead.timezone,
+                          icon: <Clock className="w-3.5 h-3.5 text-zinc-400" />,
+                        },
+                        {
+                          label: "Assigned To",
+                          value: lead.assignedTo ? (usersMap[lead.assignedTo] || "Unknown") : null,
+                          icon: <User className="w-3.5 h-3.5 text-zinc-400" />,
+                        },
+                        {
+                          label: "Created",
+                          value: new Date(lead.createdAt).toLocaleDateString("en-US", {
+                            month: "short", day: "numeric", year: "numeric",
+                          }),
+                          icon: <Calendar className="w-3.5 h-3.5 text-zinc-400" />,
+                        },
+                        {
+                          label: "Last Updated",
+                          value: new Date(lead.updatedAt).toLocaleDateString("en-US", {
+                            month: "short", day: "numeric", year: "numeric",
+                          }),
+                          icon: <Clock className="w-3.5 h-3.5 text-zinc-400" />,
+                        },
+                      ].map(({ label, value, icon }) =>
+                        value ? (
+                          <div key={label} className="flex items-start gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0 mt-0.5">
+                              {icon}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium mb-0.5">
+                                {label}
+                              </p>
+                              <p className="text-sm text-zinc-800">{value}</p>
+                            </div>
+                          </div>
+                        ) : null
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* Quick stats strip */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-zinc-200 bg-white p-4 text-center">
+                      <p className="text-2xl font-semibold text-zinc-900">{meetings.length}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Meetings</p>
+                    </div>
+                    <div className="rounded-xl border border-zinc-200 bg-white p-4 text-center">
+                      <p className="text-2xl font-semibold text-zinc-900">{activities.length}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Activities</p>
+                    </div>
+                    <div className="rounded-xl border border-zinc-200 bg-white p-4 text-center">
+                      <p className="text-2xl font-semibold text-zinc-900">{salesPrepSections.length}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Prep Sections</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             ),
           },
@@ -370,65 +562,102 @@ export default function LeadDetailPage() {
             key: "timeline",
             label: `Timeline (${activities.length})`,
             children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Activity Timeline</span>
-                  <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />} onClick={() => setShowActivityForm(true)}>
-                    Add Note
-                  </Button>
-                </div>
-              }>
-                {showActivityForm && (
-                  <div className="mb-6 p-4 bg-zinc-50 rounded-xl border border-zinc-200">
+              <div className="space-y-4">
+                {/* Add note form — shown inline above the list */}
+                {showActivityForm ? (
+                  <Card className="!rounded-xl !border-zinc-200 !shadow-sm">
+                    <p className="text-sm font-medium text-zinc-800 mb-3">New Activity</p>
                     <Form form={activityForm} layout="vertical">
                       <Form.Item name="type" label="Type" initialValue="note" className="!mb-3">
                         <Select
                           options={[
                             { value: "note", label: "Note" },
+                            { value: "call", label: "Call" },
+                            { value: "email", label: "Email" },
                             { value: "meeting", label: "Meeting Note" },
                           ]}
                         />
                       </Form.Item>
-                      <Form.Item name="content" label="Note" rules={[{ required: true, message: "Required" }]} className="!mb-3">
-                        <AntInput.TextArea rows={3} placeholder="What happened?" />
+                      <Form.Item name="content" label="What happened?" rules={[{ required: true, message: "Required" }]} className="!mb-4">
+                        <AntInput.TextArea rows={3} placeholder="Add context, outcome, next steps…" />
                       </Form.Item>
-                      <Space>
-                        <Button type="primary" onClick={handleAddActivity}>Add</Button>
+                      <div className="flex gap-2">
+                        <Button type="primary" onClick={handleAddActivity}>Save</Button>
                         <Button onClick={() => { setShowActivityForm(false); activityForm.resetFields(); }}>Cancel</Button>
-                      </Space>
+                      </div>
                     </Form>
+                  </Card>
+                ) : (
+                  <div className="flex justify-end">
+                    <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowActivityForm(true)}>
+                      Add Note
+                    </Button>
                   </div>
                 )}
 
                 {activities.length === 0 ? (
-                  <Empty description="No activities yet" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Button type="primary" icon={<Plus className="w-4 h-4" />} onClick={() => setShowActivityForm(true)}>
-                      Add Activity
+                  <div className="flex flex-col items-center justify-center py-16 border border-zinc-200 rounded-xl bg-white">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mb-3">
+                      <MessageSquare className="w-5 h-5 text-zinc-400" />
+                    </div>
+                    <p className="text-sm font-medium text-zinc-600 mb-1">No activity yet</p>
+                    <p className="text-xs text-zinc-400 mb-4">Log a call, note, or meeting to start the trail.</p>
+                    <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />} onClick={() => setShowActivityForm(true)}>
+                      Add First Note
                     </Button>
-                  </Empty>
+                  </div>
                 ) : (
-                  <Timeline
-                    items={activities.map((a) => ({
-                      dot: activityTypeIcons[a.type] || <MessageSquare className="w-4 h-4" />,
-                      children: (
-                        <div className="mb-4">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <span className="text-sm font-medium text-zinc-900 capitalize">{a.type.replace("_", " ")}</span>
-                              {a.createdByName && (
-                                <span className="text-xs text-zinc-400 ml-2">by {a.createdByName}</span>
+                  <div className="relative">
+                    {/* Vertical connector line */}
+                    <div className="absolute left-[19px] top-0 bottom-0 w-px bg-zinc-200" />
+                    <div className="space-y-1">
+                      {activities.map((a, idx) => {
+                        const typeLabel = a.type.replace(/_/g, " ");
+                        const typeColors: Record<string, string> = {
+                          note: "bg-zinc-100 text-zinc-500",
+                          call: "bg-blue-50 text-blue-500",
+                          email: "bg-indigo-50 text-indigo-500",
+                          meeting: "bg-orange-50 text-orange-500",
+                          status_change: "bg-emerald-50 text-emerald-600",
+                          document_uploaded: "bg-purple-50 text-purple-500",
+                        };
+                        return (
+                          <div key={idx} className="flex gap-4 pb-5 relative">
+                            {/* Icon bubble */}
+                            <div className={`w-10 h-10 rounded-full border-2 border-white ring-1 ring-zinc-200 flex items-center justify-center shrink-0 z-10 ${typeColors[a.type] || "bg-zinc-100 text-zinc-500"}`}>
+                              {activityTypeIcons[a.type] || <MessageSquare className="w-4 h-4" />}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 pt-1.5">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <span className="text-sm font-medium text-zinc-900 capitalize">{typeLabel}</span>
+                                {a.createdByName && (
+                                  <span className="text-xs text-zinc-400">· {a.createdByName}</span>
+                                )}
+                                <span className="ml-auto text-xs text-zinc-400 shrink-0">
+                                  {new Date(a.createdAt).toLocaleDateString("en-US", {
+                                    month: "short", day: "numeric",
+                                  })}{" "}
+                                  <span className="text-zinc-300">·</span>{" "}
+                                  {new Date(a.createdAt).toLocaleTimeString("en-US", {
+                                    hour: "2-digit", minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                              {a.content && (
+                                <div className="bg-zinc-50 border border-zinc-100 rounded-lg px-3 py-2.5 text-sm text-zinc-700 whitespace-pre-wrap">
+                                  {a.content}
+                                </div>
                               )}
                             </div>
-                            <span className="text-xs text-zinc-400 shrink-0 ml-4">{new Date(a.createdAt).toLocaleString()}</span>
                           </div>
-                          <p className="text-sm text-zinc-600 mt-1 whitespace-pre-wrap">{a.content}</p>
-                        </div>
-                      ),
-                    }))}
-                    className="!px-2"
-                  />
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-              </Card>
+              </div>
             ),
           },
           {
@@ -464,9 +693,9 @@ export default function LeadDetailPage() {
                       icon={<Plus className="w-4 h-4" />}
                       onClick={() => {
                         const id = crypto.randomUUID();
-                        const newSection: SalesPrepSection = { id, title: "New Section", content: "" };
-                        setSalesPrepSections([newSection]);
+                        setSalesPrepSections([{ id, title: "New Section", content: "" }]);
                         setActiveSectionId(id);
+                        setEditingSectionId(id);
                       }}
                     >
                       Add First Section
@@ -476,10 +705,12 @@ export default function LeadDetailPage() {
                   <Tabs
                     type="editable-card"
                     activeKey={activeSectionId ?? undefined}
-                    onChange={(key) => setActiveSectionId(key)}
+                    onChange={(key) => {
+                      setActiveSectionId(key);
+                      setEditingSectionId(null);
+                    }}
                     onEdit={(targetKey, action) => {
                       if (action === "add") {
-                        // Prompt for name immediately
                         let nameInput = "";
                         Modal.confirm({
                           title: "New Section",
@@ -497,6 +728,7 @@ export default function LeadDetailPage() {
                             const id = crypto.randomUUID();
                             setSalesPrepSections((prev) => [...prev, { id, title, content: "" }]);
                             setActiveSectionId(id);
+                            setEditingSectionId(id);
                           },
                         });
                       } else if (action === "remove") {
@@ -513,6 +745,7 @@ export default function LeadDetailPage() {
                               if (activeSectionId === key) setActiveSectionId(next[0]?.id ?? null);
                               return next;
                             });
+                            if (editingSectionId === key) setEditingSectionId(null);
                           },
                         });
                       }
@@ -550,14 +783,48 @@ export default function LeadDetailPage() {
                       ),
                       children: (
                         <div className="mt-2">
-                          <BRDContentEditor
-                            content={section.content}
-                            onChange={(html) =>
-                              setSalesPrepSections((prev) =>
-                                prev.map((s) => s.id === section.id ? { ...s, content: html } : s)
-                              )
-                            }
-                          />
+                          {editingSectionId === section.id ? (
+                            <>
+                              <div className="flex justify-end mb-2">
+                                <Button size="small" icon={<X className="w-3.5 h-3.5" />} onClick={() => setEditingSectionId(null)}>
+                                  Done editing
+                                </Button>
+                              </div>
+                              <BRDContentEditor
+                                content={section.content}
+                                onChange={(html) =>
+                                  setSalesPrepSections((prev) =>
+                                    prev.map((s) => s.id === section.id ? { ...s, content: html } : s)
+                                  )
+                                }
+                              />
+                            </>
+                          ) : section.content ? (
+                            <div className="relative rounded-lg border border-zinc-100 bg-zinc-50/40 px-4 py-3">
+                              {/* Fixed top-right Edit button — never moves with content length */}
+                              <button
+                                onClick={() => setEditingSectionId(section.id)}
+                                className="absolute top-2 right-2 inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-700 hover:bg-white border border-transparent hover:border-zinc-200 rounded-md px-2 py-1 transition-all"
+                              >
+                                <Edit3 className="w-3 h-3" /> Edit
+                              </button>
+                              <div
+                                className="prose prose-zinc max-w-none text-sm pr-12"
+                                dangerouslySetInnerHTML={{ __html: section.content }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="text-center py-10 rounded-lg border border-dashed border-zinc-200">
+                              <p className="text-sm text-zinc-400 mb-3">No content yet.</p>
+                              <Button
+                                size="small"
+                                icon={<Edit3 className="w-3.5 h-3.5" />}
+                                onClick={() => setEditingSectionId(section.id)}
+                              >
+                                Start writing
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       ),
                     }))}
@@ -570,7 +837,15 @@ export default function LeadDetailPage() {
             key: "documents",
             label: "Documents",
             children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={<span>Documents</span>}>
+              <Card
+                className="!rounded-xl !border-zinc-200 !shadow-sm"
+                title={
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-zinc-500" />
+                    <span>Documents</span>
+                  </div>
+                }
+              >
                 <DocumentList entityType="lead" entityId={leadId} />
               </Card>
             ),
@@ -579,78 +854,128 @@ export default function LeadDetailPage() {
             key: "meetings",
             label: `Meetings (${meetings.length})`,
             children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Meetings</span>
-                  <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />} onClick={() => setMeetingDrawerOpen(true)}>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-zinc-500">
+                    {meetings.length === 0
+                      ? "No meetings scheduled yet"
+                      : `${meetings.length} meeting${meetings.length !== 1 ? "s" : ""}`}
+                  </p>
+                  <Button
+                    type="primary"
+                    icon={<Plus className="w-4 h-4" />}
+                    onClick={() => setMeetingDrawerOpen(true)}
+                  >
                     Schedule Meeting
                   </Button>
                 </div>
-              }>
+
                 {meetings.length === 0 ? (
-                  <Empty description="No meetings scheduled" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Button type="primary" icon={<Plus className="w-4 h-4" />} onClick={() => setMeetingDrawerOpen(true)}>
+                  <div className="flex flex-col items-center justify-center py-16 border border-zinc-200 rounded-xl bg-white">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mb-3">
+                      <Calendar className="w-5 h-5 text-zinc-400" />
+                    </div>
+                    <p className="text-sm font-medium text-zinc-600 mb-1">No meetings yet</p>
+                    <p className="text-xs text-zinc-400 mb-4">Schedule a discovery call or follow-up.</p>
+                    <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />} onClick={() => setMeetingDrawerOpen(true)}>
                       Schedule Meeting
                     </Button>
-                  </Empty>
+                  </div>
                 ) : (
                   <div className="space-y-2">
-                    {meetings.map((meeting) => (
-                      <div
-                        key={meeting.id}
-                        className="group flex items-center gap-4 p-4 rounded-xl border border-zinc-200 hover:border-zinc-300 hover:shadow-sm transition-all cursor-pointer bg-white"
-                        onClick={() => router.push(`${APP_ROUTES.meetings}/${meeting.id}`)}
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-center shrink-0">
-                          <Calendar className="w-5 h-5 text-zinc-700" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Typography.Text strong className="!text-sm block truncate">{meeting.title}</Typography.Text>
-                            {meeting.meetLink && (
-                              <Tag className="!rounded-full !text-[10px] !px-1.5 !py-0 !leading-none !border-purple-200 !text-purple-600 !bg-purple-50 shrink-0">
-                                <Video className="w-2.5 h-2.5 inline mr-0.5" />Meet
+                    {meetings.map((meeting) => {
+                      const date = new Date(meeting.meetingDate);
+                      const isPast = date < new Date();
+                      const statusColor =
+                        meeting.status === "completed" ? "green"
+                        : meeting.status === "cancelled" ? "red"
+                        : "blue";
+
+                      return (
+                        <div
+                          key={meeting.id}
+                          className="group flex items-start gap-4 p-4 rounded-xl border border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm transition-all cursor-pointer"
+                          onClick={() => router.push(`${APP_ROUTES.meetings}/${meeting.id}`)}
+                        >
+                          {/* Date block */}
+                          <div className="shrink-0 w-12 text-center rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-1">
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium leading-none">
+                              {date.toLocaleDateString("en-US", { month: "short" })}
+                            </p>
+                            <p className="text-xl font-semibold text-zinc-900 leading-tight">
+                              {date.getDate()}
+                            </p>
+                            <p className="text-[10px] text-zinc-400 leading-none">
+                              {date.toLocaleDateString("en-US", { weekday: "short" })}
+                            </p>
+                          </div>
+
+                          {/* Body */}
+                          <div className="flex-1 min-w-0 pt-0.5">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="text-sm font-medium text-zinc-900 truncate">{meeting.title}</span>
+                              {meeting.meetLink && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200 shrink-0">
+                                  <Video className="w-2.5 h-2.5" /> Meet
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Tag
+                                color={statusColor}
+                                className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none"
+                              >
+                                {meeting.status.replace(/_/g, " ")}
                               </Tag>
-                            )}
+                              <span className="text-xs text-zinc-400">
+                                {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                              {meeting.durationMinutes && (
+                                <span className="text-xs text-zinc-400">· {meeting.durationMinutes} min</span>
+                              )}
+                              {meeting.attendees && meeting.attendees.length > 0 && (
+                                <span className="text-xs text-zinc-400">
+                                  · {meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Tag color={meeting.status === "completed" ? "green" : meeting.status === "cancelled" ? "red" : "blue"} className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none">
-                              {meeting.status.replace("_", " ")}
-                            </Tag>
-                            <Typography.Text className="text-xs text-zinc-400">
-                              {new Date(meeting.meetingDate).toLocaleDateString("en-US", {
-                                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                              })}
-                            </Typography.Text>
-                            {meeting.durationMinutes && (
-                              <Typography.Text className="text-xs text-zinc-400">&middot; {meeting.durationMinutes} min</Typography.Text>
+
+                          {/* Actions — reveal on row hover */}
+                          <Space
+                            size={4}
+                            onClick={(e) => e.stopPropagation()}
+                            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5"
+                          >
+                            {meeting.meetLink && (
+                              <a href={meeting.meetLink} target="_blank" rel="noopener noreferrer">
+                                <Button
+                                  size="small"
+                                  icon={<Video className="w-3 h-3" />}
+                                  className="!text-xs !border-zinc-200 !text-zinc-700"
+                                >
+                                  Join
+                                </Button>
+                              </a>
                             )}
-                            {meeting.attendees && meeting.attendees.length > 0 && (
-                              <Typography.Text className="text-xs text-zinc-400">&middot; {meeting.attendees.length} {meeting.attendees.length === 1 ? "attendee" : "attendees"}</Typography.Text>
-                            )}
-                          </div>
+                            <Button
+                              size="small"
+                              danger
+                              type="text"
+                              icon={
+                                meetingDeleting === meeting.id
+                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  : <Trash2 className="w-3.5 h-3.5" />
+                              }
+                              onClick={() => handleDeleteMeeting(meeting.id)}
+                            />
+                          </Space>
                         </div>
-                        <Space size={4} onClick={(e) => e.stopPropagation()} className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {meeting.meetLink && (
-                            <a href={meeting.meetLink} target="_blank" rel="noopener noreferrer">
-                              <Button size="small" icon={<Video className="w-3 h-3" />} className="!text-zinc-800 !border-zinc-300 !text-xs">
-                                Join
-                              </Button>
-                            </a>
-                          )}
-                          <Button
-                            size="small"
-                            danger
-                            type="text"
-                            icon={meetingDeleting === meeting.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                            onClick={() => handleDeleteMeeting(meeting.id)}
-                          />
-                        </Space>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
-              </Card>
+              </div>
             ),
           },
         ]}
