@@ -74,6 +74,22 @@ const leadsSlice = createSlice({
       }
     },
     updateLeadStatusFailure: (_state, _action: PayloadAction<string>) => {},
+    // Revert a converted lead back to lead-stage. Same success reducer
+    // shape as ``updateLeadStatusSuccess`` — the saga refreshes the
+    // full detail on completion so the activities list picks up the
+    // ``lead_reverted`` entry too.
+    revertLeadRequest: (
+      _state,
+      _action: PayloadAction<{ id: string; status: string }>,
+    ) => {},
+    revertLeadSuccess: (state, action: PayloadAction<Lead>) => {
+      const idx = state.items.findIndex((l) => l.id === action.payload.id);
+      if (idx !== -1) state.items[idx] = action.payload;
+      if (state.detail?.lead.id === action.payload.id) {
+        state.detail.lead = action.payload;
+      }
+    },
+    revertLeadFailure: (_state, _action: PayloadAction<string>) => {},
     addActivityRequest: (_state, _action: PayloadAction<LeadActivityCreatePayload>) => {},
     addActivitySuccess: (state, action: PayloadAction<LeadActivity>) => {
       state.activities.unshift(action.payload);
@@ -143,6 +159,9 @@ export const {
   updateLeadStatusRequest,
   updateLeadStatusSuccess,
   updateLeadStatusFailure,
+  revertLeadRequest,
+  revertLeadSuccess,
+  revertLeadFailure,
   addActivityRequest,
   addActivitySuccess,
   addActivityFailure,

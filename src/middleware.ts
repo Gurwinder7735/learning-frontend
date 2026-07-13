@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const protectedPaths = ["/clients", "/documents", "/meetings", "/legal", "/finance", "/knowledge", "/users", "/brd", "/proposals", "/agreements", "/sow"];
+const protectedPaths = ["/dashboard", "/reports", "/clients", "/leads", "/documents", "/meetings", "/legal", "/finance", "/knowledge", "/users", "/brd", "/proposals", "/agreements", "/sow"];
 const publicSharePaths = ["/brd/share", "/proposals/share", "/agreements/sign", "/sow/share", "/sow/features/share"];
 const authPaths = ["/login", "/register"];
 
@@ -24,7 +24,7 @@ export function middleware(request: NextRequest) {
   }
 
   if (isAuth && token) {
-    return NextResponse.redirect(new URL("/clients", request.url));
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return NextResponse.next();

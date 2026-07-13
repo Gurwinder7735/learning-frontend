@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Input, InputNumber, Select, Button, Typography, Radio, Alert } from "antd";
 import { Sparkles, Loader2 } from "lucide-react";
 import type { BRD } from "@/types/models/BRD";
-import type { Client } from "@/types/models/Client";
+import type { AccountOption } from "@/types/models/Client";
 import type {
   ProposalGenerateInput,
   ProposalPaymentType,
@@ -20,7 +20,7 @@ import type {
 interface Props {
   brds: BRD[];
   brdsLoading: boolean;
-  clients: Client[];
+  clients: AccountOption[];
   clientsLoading: boolean;
   onSubmit: (data: ProposalGenerateInput) => Promise<void>;
   loading: boolean;
@@ -163,8 +163,14 @@ export function ProposalGenerationForm({
           filterOption={(input, option) =>
             (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
           }
-          notFoundContent={clientsLoading ? "Loading..." : "No clients found"}
-          options={clients.map((c) => ({ value: c.id, label: c.companyName }))}
+          notFoundContent={clientsLoading ? "Loading..." : "No accounts found"}
+          options={clients.map((c) => ({
+            value: c.id,
+            label:
+              (c.lifecycleStage ?? c.originStage) === "lead"
+                ? `${c.companyName} (Lead)`
+                : c.companyName,
+          }))}
         />
       </div>
 

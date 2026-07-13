@@ -51,6 +51,7 @@ export const API_ENDPOINTS = {
     delete: (id: string) => `/api/v1/leads/${id}`,
     updateStatus: (id: string) => `/api/v1/leads/${id}/status`,
     convert: (id: string) => `/api/v1/leads/${id}/convert`,
+    revert: (id: string) => `/api/v1/leads/${id}/revert`,
     activities: (leadId: string) => `/api/v1/leads/${leadId}/activities`,
     meetings: (leadId: string) => `/api/v1/leads/${leadId}/meetings`,
     updateMeeting: (leadId: string, meetingId: string) => `/api/v1/leads/${leadId}/meetings/${meetingId}`,

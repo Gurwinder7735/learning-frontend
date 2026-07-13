@@ -24,6 +24,8 @@ import { fetchBRDsRequest } from "@/store/modules/brd/brdSlice";
 import { selectBRDs, selectBRDLoading } from "@/store/modules/brd/brdSelectors";
 import { selectClients, selectClientsMeta } from "@/store/modules/clients/clientsSelectors";
 import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
+import { selectLeads, selectLeadsMeta } from "@/store/modules/leads/leadsSelectors";
+import { fetchLeadsRequest } from "@/store/modules/leads/leadsSlice";
 import { BRDGenerationForm } from "@/components/features/BRD/BRDGenerationForm";
 import { storage } from "@/lib/utils/storage";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
@@ -148,6 +150,19 @@ export default function BRDPage() {
   const isLoading = useAppSelector(selectBRDLoading);
   const clients = useAppSelector(selectClients);
   const clientsMeta = useAppSelector(selectClientsMeta);
+  const leads = useAppSelector(selectLeads);
+  const leadsMeta = useAppSelector(selectLeadsMeta);
+
+  // Unified account list — leads first (pre-conversion is the most common
+  // use case for BRDs), then converted clients. Leads still in the
+  // funnel show a "(Lead)" suffix so the user knows they're not yet billed.
+  const allAccounts = [
+    ...leads
+      .filter((l) => l.lifecycleStage !== "client")
+      .map((l) => ({ id: l.id, companyName: l.companyName, lifecycleStage: "lead" as const, originStage: "lead" as const })),
+    ...clients.map((c) => ({ id: c.id, companyName: c.companyName, lifecycleStage: "client" as const, originStage: c.originStage })),
+  ];
+  const accountsLoading = clientsMeta.isLoading || leadsMeta.isLoading;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -155,6 +170,7 @@ export default function BRDPage() {
   useEffect(() => {
     dispatch(fetchBRDsRequest());
     dispatch(fetchClientsRequest({ limit: 200 }));
+    dispatch(fetchLeadsRequest({ limit: 200 }));
   }, [dispatch]);
 
   const handleDelete = (brd: BRD) => {
@@ -316,8 +332,8 @@ export default function BRDPage() {
         destroyOnClose
       >
         <BRDGenerationForm
-          clients={clients}
-          clientsLoading={clientsMeta.isLoading}
+          clients={allAccounts}
+          clientsLoading={accountsLoading}
           onSubmit={handleGenerate}
           loading={generating}
         />

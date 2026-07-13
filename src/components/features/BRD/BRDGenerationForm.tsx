@@ -11,10 +11,10 @@ import {
 } from "antd";
 import { Sparkles, Loader2, UploadCloud, X } from "lucide-react";
 import type { UploadFile } from "antd/es/upload/interface";
-import type { Client } from "@/types/models/Client";
+import type { AccountOption } from "@/types/models/Client";
 
 interface Props {
-  clients: Client[];
+  clients: AccountOption[];
   clientsLoading: boolean;
   onSubmit: (data: {
     name: string;
@@ -97,8 +97,14 @@ export function BRDGenerationForm({ clients, clientsLoading, onSubmit, loading }
           filterOption={(input, option) =>
             (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
           }
-          notFoundContent={clientsLoading ? "Loading..." : "No clients found"}
-          options={clients.map((c) => ({ value: c.id, label: c.companyName }))}
+          notFoundContent={clientsLoading ? "Loading..." : "No accounts found"}
+          options={clients.map((c) => ({
+            value: c.id,
+            label:
+              (c.lifecycleStage ?? c.originStage) === "lead"
+                ? `${c.companyName} (Lead)`
+                : c.companyName,
+          }))}
         />
       </div>
 

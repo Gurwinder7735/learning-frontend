@@ -65,6 +65,8 @@ import {
   selectClients,
   selectClientsMeta,
 } from "@/store/modules/clients/clientsSelectors";
+import { fetchLeadsRequest } from "@/store/modules/leads/leadsSlice";
+import { selectLeads, selectLeadsMeta } from "@/store/modules/leads/leadsSelectors";
 
 import type { ProposalAgentRun, ProposalVersion } from "@/types/models/Proposal";
 
@@ -310,6 +312,15 @@ export default function ProposalDetailPage() {
   const isLoading = useAppSelector(selectProposalsLoading);
   const clients = useAppSelector(selectClients);
   const clientsMeta = useAppSelector(selectClientsMeta);
+  const leads = useAppSelector(selectLeads);
+  const leadsMeta = useAppSelector(selectLeadsMeta);
+  const allAccounts = [
+    ...leads
+      .filter((l) => l.lifecycleStage !== "client")
+      .map((l) => ({ id: l.id, companyName: l.companyName, isLead: true })),
+    ...clients.map((c) => ({ id: c.id, companyName: c.companyName, isLead: false })),
+  ];
+  const accountsLoading = clientsMeta.isLoading || leadsMeta.isLoading;
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -428,7 +439,7 @@ export default function ProposalDetailPage() {
           body: JSON.stringify({
             clientId: meta.clientId || null,
             clientName: meta.clientId
-              ? (clients.find((c) => c.id === meta.clientId)?.companyName ?? null)
+              ? (allAccounts.find((a) => a.id === meta.clientId)?.companyName ?? null)
               : null,
             preparedBy: meta.preparedBy || null,
             documentDate: meta.documentDate || null,
@@ -695,9 +706,8 @@ export default function ProposalDetailPage() {
   useEffect(() => {
     dispatch(clearGeneration());
     dispatch(fetchProposalDetailRequest(proposalId));
-    // Populate the client dropdown for the cover metadata block. Same
-    // list is used by the generation form so cache hits are common.
     dispatch(fetchClientsRequest({ limit: 200 }));
+    dispatch(fetchLeadsRequest({ limit: 200 }));
   }, [proposalId, dispatch]);
 
   useEffect(() => {
@@ -1030,15 +1040,15 @@ export default function ProposalDetailPage() {
                           allowClear
                           showSearch
                           style={{ width: "100%" }}
-                          loading={clientsMeta.isLoading}
+                          loading={accountsLoading}
                           filterOption={(input, option) =>
                             ((option?.label as string) ?? "")
                               .toLowerCase()
                               .includes(input.toLowerCase())
                           }
-                          options={clients.map((c) => ({
-                            value: c.id,
-                            label: c.companyName,
+                          options={allAccounts.map((a) => ({
+                            value: a.id,
+                            label: a.isLead ? `${a.companyName} (Lead)` : a.companyName,
                           }))}
                         />
                       </div>

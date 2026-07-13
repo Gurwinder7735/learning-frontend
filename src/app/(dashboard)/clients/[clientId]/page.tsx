@@ -2,15 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Tag, Card, Tabs, Descriptions, Space, Typography, Empty, Spin, Modal, Form, Input as AntInput, Select, Drawer, List, App, Dropdown } from "antd";
-import { ArrowLeft, Building2, Edit3, Trash2, Plus, Phone, Mail, ExternalLink, UserPlus, MoreHorizontal } from "lucide-react";
-import { INDUSTRY_OPTIONS, COUNTRY_OPTIONS, getFilteredTimezones } from "@/lib/constants/clientOptions";
+import { Button, Tag, Card, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, Drawer, App, Dropdown } from "antd";
+import { ArrowLeft, Briefcase, Building2, Calendar, Clock, Edit3, ExternalLink, FileText, Globe, Mail, MapPin, MoreHorizontal, Phone, Plus, Trash2, User, UserPlus } from "lucide-react";
+import { AccountFormFields } from "@/components/features/AccountPanels/AccountFormFields";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
 import type { Contact } from "@/types/models/Client";
 import { fetchClientDetailRequest, clearClientDetail, updateClientRequest, deleteClientRequest, addContactRequest, updateContactRequest, removeContactRequest } from "@/store/modules/clients/clientsSlice";
 import { selectClientDetail, selectClientContacts } from "@/store/modules/clients/clientsSelectors";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
+import { AccountTimelinePanel } from "@/components/features/AccountPanels/AccountTimelinePanel";
+import { AccountMeetingsPanel } from "@/components/features/AccountPanels/AccountMeetingsPanel";
+import {
+  AccountSalesPrepPanel,
+  type SalesPrepSection,
+} from "@/components/features/AccountPanels/AccountSalesPrepPanel";
+import DocumentList from "@/components/documents/DocumentList";
 
 const statusColors: Record<string, string> = {
   active: "green",
@@ -46,7 +53,6 @@ export default function ClientDetailPage() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [editForm] = Form.useForm();
   const [contactForm] = Form.useForm();
-  const [editCountry, setEditCountry] = useState<string>();
 
   useEffect(() => {
     if (clientId) {
@@ -122,32 +128,55 @@ export default function ClientDetailPage() {
     );
   }
 
+  // Post-merge, a record whose ``origin_stage=lead`` entered the system
+  // through the Leads module. Kept as a boolean here — used to gate the
+  // "Lead origin" collapsible on Overview and the "Sales Prep" tab
+  // below (both invisible on direct-created client records).
+  const isFromLead = client.originStage === "lead";
+
   return (
     <div>
+      {/* ── Page header ───────────────────────────────────────────── */}
       <div className="mb-6">
-        <Button type="text" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => router.push(APP_ROUTES.clients)} className="!text-zinc-500 hover:!text-zinc-900 !-ml-2 mb-2">
+        <Button
+          type="text"
+          icon={<ArrowLeft className="w-4 h-4" />}
+          onClick={() => router.push(APP_ROUTES.clients)}
+          className="!text-zinc-500 hover:!text-zinc-900 !-ml-2 mb-2"
+        >
           Back to Clients
         </Button>
+
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-xl bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0">
               <Building2 className="w-7 h-7 text-zinc-500" />
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <Typography.Title level={3} className="!mb-0 !text-2xl">{client.companyName}</Typography.Title>
-                <Tag color={statusColors[client.status] || "default"} className="!rounded-full !px-3 !py-0.5 !text-xs">
-                  {client.status.replace("_", " ")}
+              <div className="flex items-center gap-3 flex-wrap">
+                <Typography.Title level={3} className="!mb-0 !text-2xl">
+                  {client.companyName}
+                </Typography.Title>
+                <Tag
+                  color={statusColors[client.status] || "default"}
+                  className="!rounded-full !px-3 !py-0.5 !text-xs"
+                >
+                  {client.status.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
                 </Tag>
               </div>
               <Typography.Text className="text-zinc-500 text-sm">
+                {client.industry && <>{client.industry} &middot; </>}
                 {sourceLabels[client.sourceType] || client.sourceType}
-                {client.referredBy && <> &middot; Referred by {client.referredBy}</>}
+                {client.country && <> &middot; {client.country}</>}
               </Typography.Text>
             </div>
           </div>
+
           <Space>
-            <Button icon={<Edit3 className="w-4 h-4" />} onClick={() => { editForm.setFieldsValue(client); setEditCountry(client.country ?? undefined); setEditDrawerOpen(true); }}>
+            <Button
+              icon={<Edit3 className="w-4 h-4" />}
+              onClick={() => { editForm.setFieldsValue(client); setEditDrawerOpen(true); }}
+            >
               Edit
             </Button>
             <Button danger icon={<Trash2 className="w-4 h-4" />} onClick={handleDelete}>
@@ -164,29 +193,225 @@ export default function ClientDetailPage() {
             key: "overview",
             label: "Overview",
             children: (
-              <div className="space-y-6">
-                <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title="Company Information">
-                  <Descriptions column={{ xs: 1, sm: 2 }} colon={false} className="[&_.ant-descriptions-item-content]:text-zinc-900">
-                    {client.email && <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Email</span>}>{client.email}</Descriptions.Item>}
-                    {client.phone && <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Phone</span>}>{client.phone}</Descriptions.Item>}
-                    {client.industry && <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Industry</span>}>{client.industry}</Descriptions.Item>}
-                    {client.country && <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Country</span>}>{client.country}</Descriptions.Item>}
-                    {client.timezone && <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Timezone</span>}>{client.timezone}</Descriptions.Item>}
-                    {client.website && (
-                      <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Website</span>}>
-                        <a href={client.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{client.website}</a>
-                      </Descriptions.Item>
-                    )}
-                    <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Source</span>}>{sourceLabels[client.sourceType] || client.sourceType}</Descriptions.Item>
-                    {client.referredBy && <Descriptions.Item label={<span className="text-zinc-500 text-xs font-medium uppercase tracking-wider">Referred By</span>}>{client.referredBy}</Descriptions.Item>}
-                  </Descriptions>
-                </Card>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* ── Left: company identity card ─────────────────── */}
+                <div className="lg:col-span-1 flex flex-col gap-4">
+                  <Card className="!rounded-xl !border-zinc-200 !shadow-sm">
+                    {/* Brand block */}
+                    <div className="flex flex-col items-center text-center pb-4 border-b border-zinc-100">
+                      <div className="w-16 h-16 rounded-2xl bg-zinc-100 border border-zinc-200 flex items-center justify-center mb-3">
+                        <Building2 className="w-8 h-8 text-zinc-400" />
+                      </div>
+                      <p className="text-base font-semibold text-zinc-900 leading-tight">
+                        {client.companyName}
+                      </p>
+                      {client.industry && (
+                        <p className="text-sm text-zinc-500 mt-0.5">{client.industry}</p>
+                      )}
+                      <Tag
+                        color={statusColors[client.status] || "default"}
+                        className="!rounded-full !px-3 !py-0.5 !text-xs mt-2"
+                      >
+                        {client.status.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+                      </Tag>
+                    </div>
 
-                {client.internalNotes && (
-                  <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title="Internal Notes">
-                    <Typography.Paragraph className="!text-zinc-700 !whitespace-pre-wrap">{client.internalNotes}</Typography.Paragraph>
+                    {/* Quick-action buttons */}
+                    {(client.email || client.phone || client.website) && (
+                      <div className="flex gap-2 pt-4 pb-2">
+                        {client.email && (
+                          <a href={`mailto:${client.email}`} className="flex-1">
+                            <Button block icon={<Mail className="w-3.5 h-3.5" />} size="small" className="!rounded-lg !text-xs !border-zinc-200 !text-zinc-600">
+                              Email
+                            </Button>
+                          </a>
+                        )}
+                        {client.phone && (
+                          <a href={`tel:${client.phone}`} className="flex-1">
+                            <Button block icon={<Phone className="w-3.5 h-3.5" />} size="small" className="!rounded-lg !text-xs !border-zinc-200 !text-zinc-600">
+                              Call
+                            </Button>
+                          </a>
+                        )}
+                        {client.website && (
+                          <a href={client.website} target="_blank" rel="noopener noreferrer" className="flex-1">
+                            <Button block icon={<Globe className="w-3.5 h-3.5" />} size="small" className="!rounded-lg !text-xs !border-zinc-200 !text-zinc-600">
+                              Website
+                            </Button>
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Contact detail rows */}
+                    <div className="space-y-3 pt-2">
+                      {client.email && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <Mail className="w-3.5 h-3.5 text-zinc-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Email</p>
+                            <p className="text-sm text-zinc-800 truncate">{client.email}</p>
+                          </div>
+                        </div>
+                      )}
+                      {client.phone && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <Phone className="w-3.5 h-3.5 text-zinc-500" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Phone</p>
+                            <p className="text-sm text-zinc-800">{client.phone}</p>
+                          </div>
+                        </div>
+                      )}
+                      {client.website && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <Globe className="w-3.5 h-3.5 text-zinc-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Website</p>
+                            <a
+                              href={client.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:underline truncate block"
+                            >
+                              {client.website.replace(/^https?:\/\//, "")}
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                      {contacts.length > 0 && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <User className="w-3.5 h-3.5 text-zinc-500" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Primary Contact</p>
+                            <p className="text-sm text-zinc-800">
+                              {contacts.find((c) => c.isPrimary)?.fullName ?? contacts[0].fullName}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </Card>
-                )}
+                </div>
+
+                {/* ── Right: account details + stats ───────────────── */}
+                <div className="lg:col-span-2 flex flex-col gap-4">
+                  <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title="Account Details">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+                      {[
+                        { label: "Industry", value: client.industry, icon: <Briefcase className="w-3.5 h-3.5 text-zinc-400" /> },
+                        { label: "Country", value: client.country, icon: <MapPin className="w-3.5 h-3.5 text-zinc-400" /> },
+                        { label: "Timezone", value: client.timezone, icon: <Clock className="w-3.5 h-3.5 text-zinc-400" /> },
+                        { label: "Source", value: sourceLabels[client.sourceType] || client.sourceType, icon: <ExternalLink className="w-3.5 h-3.5 text-zinc-400" /> },
+                        { label: "Referred By", value: client.referredBy, icon: <User className="w-3.5 h-3.5 text-zinc-400" /> },
+                        {
+                          label: "Client Since",
+                          value: new Date(client.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+                          icon: <Calendar className="w-3.5 h-3.5 text-zinc-400" />,
+                        },
+                      ].map(({ label, value, icon }) =>
+                        value ? (
+                          <div key={label} className="flex items-start gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0 mt-0.5">
+                              {icon}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium mb-0.5">{label}</p>
+                              <p className="text-sm text-zinc-800">{value}</p>
+                            </div>
+                          </div>
+                        ) : null
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* Internal notes */}
+                  {client.internalNotes && (
+                    <Card
+                      className="!rounded-xl !border-zinc-200 !shadow-sm"
+                      title={
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-zinc-500" />
+                          <span>Internal Notes</span>
+                        </div>
+                      }
+                    >
+                      <p className="text-sm text-zinc-700 whitespace-pre-wrap">{client.internalNotes}</p>
+                    </Card>
+                  )}
+
+                  {/* Lead-origin strip — only for converted leads */}
+                  {isFromLead && (
+                    <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-zinc-500" />
+                        <span>Lead Origin</span>
+                      </div>
+                    }>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+                        {client.contactPerson && (
+                          <div className="flex items-start gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                              <User className="w-3.5 h-3.5 text-zinc-400" />
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium mb-0.5">Contact Person</p>
+                              <p className="text-sm text-zinc-800">{client.contactPerson}</p>
+                            </div>
+                          </div>
+                        )}
+                        {client.linkedinProfile && (
+                          <div className="flex items-start gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                              <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium mb-0.5">LinkedIn</p>
+                              <a href={client.linkedinProfile} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                                View Profile
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                        {client.convertedToClientAt && (
+                          <div className="flex items-start gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                              <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium mb-0.5">Converted On</p>
+                              <p className="text-sm text-zinc-800">
+                                {new Date(client.convertedToClientAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Quick stats */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-zinc-200 bg-white p-4 text-center">
+                      <p className="text-2xl font-semibold text-zinc-900">{contacts.length}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Contacts</p>
+                    </div>
+                    <div className="rounded-xl border border-zinc-200 bg-white p-4 text-center">
+                      <p className="text-2xl font-semibold text-zinc-900">
+                        {new Date(client.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Member Since</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             ),
           },
@@ -194,79 +419,151 @@ export default function ClientDetailPage() {
             key: "contacts",
             label: `Contacts (${contacts.length})`,
             children: (
-              <Card className="!rounded-xl !border-zinc-200 !shadow-sm" title={
-                <div className="flex items-center justify-between w-full">
-                  <span>Contacts</span>
-                  <Button type="primary" size="small" icon={<UserPlus className="w-4 h-4" />} onClick={() => openContactDrawer()}>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-zinc-500">
+                    {contacts.length === 0
+                      ? "No contacts yet"
+                      : `${contacts.length} contact${contacts.length !== 1 ? "s" : ""}`}
+                  </p>
+                  <Button
+                    type="primary"
+                    icon={<UserPlus className="w-4 h-4" />}
+                    onClick={() => openContactDrawer()}
+                  >
                     Add Contact
                   </Button>
                 </div>
-              }>
+
                 {contacts.length === 0 ? (
-                  <Empty description="No contacts yet" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                    <Button type="primary" icon={<Plus className="w-4 h-4" />} onClick={() => openContactDrawer()}>
+                  <div className="flex flex-col items-center justify-center py-16 border border-zinc-200 rounded-xl bg-white">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mb-3">
+                      <User className="w-5 h-5 text-zinc-400" />
+                    </div>
+                    <p className="text-sm font-medium text-zinc-600 mb-1">No contacts yet</p>
+                    <p className="text-xs text-zinc-400 mb-4">Add the people you work with at this account.</p>
+                    <Button type="primary" size="small" icon={<Plus className="w-4 h-4" />} onClick={() => openContactDrawer()}>
                       Add Contact
                     </Button>
-                  </Empty>
+                  </div>
                 ) : (
-                  <List
-                    dataSource={contacts}
-                    renderItem={(contact) => (
-                      <List.Item
-                        className="!border-zinc-100 !py-4"
-                        actions={[
-                          <Dropdown key="more" menu={{
-                            items: [
-                              { key: "edit", icon: <Edit3 className="w-4 h-4" />, label: "Edit", onClick: () => openContactDrawer(contact) },
-                              { type: "divider" },
-                              { key: "delete", icon: <Trash2 className="w-4 h-4" />, label: "Remove", danger: true, onClick: () => handleDeleteContact(contact) },
-                            ],
-                          }}>
-                            <Button type="text" icon={<MoreHorizontal className="w-4 h-4" />} />
-                          </Dropdown>,
-                        ]}
+                  <div className="space-y-2">
+                    {contacts.map((contact) => (
+                      <div
+                        key={contact.id}
+                        className="group flex items-center gap-4 p-4 rounded-xl border border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm transition-all"
                       >
-                        <List.Item.Meta
-                          avatar={
-                            <div className="w-10 h-10 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-sm font-medium text-zinc-600 shrink-0">
-                              {contact.fullName.slice(0, 2).toUpperCase()}
-                            </div>
-                          }
-                          title={
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-zinc-900">{contact.fullName}</span>
-                              {contact.isPrimary && <Tag color="blue" className="!text-[10px] !px-1.5 !py-0 !leading-none !rounded-full">Primary</Tag>}
-                            </div>
-                          }
-                          description={
-                            <div className="space-y-1 mt-1">
-                              {contact.designation && <Typography.Text className="!text-xs !text-zinc-500 block">{contact.designation}</Typography.Text>}
-                              <div className="flex flex-wrap gap-3">
-                                {contact.email && (
-                                  <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                    <Mail className="w-3 h-3" /> {contact.email}
-                                  </a>
-                                )}
-                                {contact.phone && (
-                                  <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900">
-                                    <Phone className="w-3 h-3" /> {contact.phone}
-                                  </a>
-                                )}
-                                {contact.linkedinProfile && (
-                                  <a href={contact.linkedinProfile} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                    <ExternalLink className="w-3 h-3" /> LinkedIn
-                                  </a>
-                                )}
-                              </div>
-                              {contact.notes && <Typography.Text className="!text-xs !text-zinc-400 block italic">{contact.notes}</Typography.Text>}
-                            </div>
-                          }
-                        />
-                      </List.Item>
-                    )}
-                  />
+                        {/* Avatar */}
+                        <div className="w-10 h-10 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-sm font-semibold text-zinc-600 shrink-0">
+                          {contact.fullName.slice(0, 2).toUpperCase()}
+                        </div>
+
+                        {/* Name + role */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-sm font-medium text-zinc-900 truncate">{contact.fullName}</span>
+                            {contact.isPrimary && (
+                              <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 shrink-0">
+                                Primary
+                              </span>
+                            )}
+                          </div>
+                          {contact.designation && (
+                            <p className="text-xs text-zinc-500 truncate">{contact.designation}</p>
+                          )}
+                          <div className="flex flex-wrap gap-3 mt-1.5">
+                            {contact.email && (
+                              <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                <Mail className="w-3 h-3 shrink-0" /> {contact.email}
+                              </a>
+                            )}
+                            {contact.phone && (
+                              <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900">
+                                <Phone className="w-3 h-3 shrink-0" /> {contact.phone}
+                              </a>
+                            )}
+                            {contact.linkedinProfile && (
+                              <a href={contact.linkedinProfile} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                <ExternalLink className="w-3 h-3 shrink-0" /> LinkedIn
+                              </a>
+                            )}
+                          </div>
+                          {contact.notes && (
+                            <p className="text-xs text-zinc-400 italic mt-1 truncate">{contact.notes}</p>
+                          )}
+                        </div>
+
+                        {/* Actions — reveal on hover */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          <Dropdown
+                            menu={{
+                              items: [
+                                { key: "edit", icon: <Edit3 className="w-4 h-4" />, label: "Edit", onClick: () => openContactDrawer(contact) },
+                                { type: "divider" },
+                                { key: "delete", icon: <Trash2 className="w-4 h-4" />, label: "Remove", danger: true, onClick: () => handleDeleteContact(contact) },
+                              ],
+                            }}
+                          >
+                            <Button type="text" size="small" icon={<MoreHorizontal className="w-4 h-4" />} />
+                          </Dropdown>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
+              </div>
+            ),
+          },
+          {
+            key: "meetings",
+            label: "Meetings",
+            children: (
+              <AccountMeetingsPanel
+                accountId={clientId}
+                apiBase="/api/v1/clients"
+              />
+            ),
+          },
+          {
+            key: "timeline",
+            label: "Timeline",
+            children: (
+              <AccountTimelinePanel
+                accountId={clientId}
+                apiBase="/api/v1/clients"
+              />
+            ),
+          },
+          {
+            key: "documents",
+            label: "Documents",
+            children: (
+              <Card className="!rounded-xl !border-zinc-200 !shadow-sm">
+                <DocumentList entityType="client" entityId={clientId} />
               </Card>
+            ),
+          },
+          {
+            key: "sales-prep",
+            label: "Sales Prep",
+            children: (
+              <AccountSalesPrepPanel
+                accountId={clientId}
+                apiBase="/api/v1/clients"
+                initialSections={(client.salesPrepSections ?? []) as SalesPrepSection[]}
+              />
+            ),
+          },
+          {
+            key: "notes",
+            label: "Notes",
+            children: (
+              <AccountSalesPrepPanel
+                accountId={clientId}
+                apiBase="/api/v1/clients"
+                initialSections={(client.notesSections ?? []) as SalesPrepSection[]}
+                notesMode
+              />
             ),
           },
         ]}
@@ -286,43 +583,21 @@ export default function ClientDetailPage() {
         destroyOnClose
       >
         <Form form={editForm} layout="vertical">
-          <Form.Item name="companyName" label="Company Name" rules={[{ required: true, message: "Required" }]}>
-            <AntInput />
-          </Form.Item>
-          <Form.Item name="email" label="Email"><AntInput /></Form.Item>
-          <Form.Item name="phone" label="Phone"><AntInput /></Form.Item>
-          <Form.Item name="website" label="Website"><AntInput /></Form.Item>
-          <Form.Item name="industry" label="Industry">
-            <Select showSearch placeholder="Select industry" options={INDUSTRY_OPTIONS} allowClear />
-          </Form.Item>
-          <Form.Item name="country" label="Country">
-            <Select showSearch placeholder="Select country" options={COUNTRY_OPTIONS} allowClear onChange={(val) => { setEditCountry(val); editForm.setFieldValue("timezone", undefined); }} />
-          </Form.Item>
-          <Form.Item name="timezone" label="Timezone">
-            <Select showSearch placeholder={editCountry ? "Select timezone for " + editCountry : "Select a country first"} options={getFilteredTimezones(editCountry)} allowClear disabled={!editCountry} />
-          </Form.Item>
-          <Form.Item name="sourceType" label="Source">
-            <Select options={[
-              { value: "referral", label: "Referral" },
-              { value: "linkedin", label: "LinkedIn" },
-              { value: "upwork", label: "Upwork" },
-              { value: "website", label: "Website" },
-              { value: "existing_client", label: "Existing Client" },
-              { value: "partner", label: "Partner" },
-              { value: "cold_outreach", label: "Cold Outreach" },
-              { value: "other", label: "Other" },
-            ]} />
-          </Form.Item>
-          <Form.Item name="referredBy" label="Referred By"><AntInput /></Form.Item>
+          <AccountFormFields form={editForm} />
+          {/* Client-only status control. Only meaningful for records
+              already in the client lifecycle stage — lead-origin
+              records still in ``lead`` stage use ``lead_status`` via
+              the status dropdown on the lead detail page. */}
           <Form.Item name="status" label="Status">
-            <Select options={[
-              { value: "active", label: "Active" },
-              { value: "on_hold", label: "On Hold" },
-              { value: "completed", label: "Completed" },
-              { value: "inactive", label: "Inactive" },
-            ]} />
+            <Select
+              options={[
+                { value: "active", label: "Active" },
+                { value: "on_hold", label: "On Hold" },
+                { value: "completed", label: "Completed" },
+                { value: "inactive", label: "Inactive" },
+              ]}
+            />
           </Form.Item>
-          <Form.Item name="internalNotes" label="Internal Notes"><AntInput.TextArea rows={3} /></Form.Item>
         </Form>
       </Drawer>
 
