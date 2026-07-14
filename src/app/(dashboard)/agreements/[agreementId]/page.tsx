@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button, Input, Modal, Select, Spin, Typography, message, Tooltip } from "antd";
+import { Button, Drawer, Form, Input, Modal, Select, Space, Spin, Table, Tag, Typography, message, Tooltip } from "antd";
+import { Mail, CheckCircle, XCircle } from "lucide-react";
 import {
   ArrowLeft,
   Building2,
@@ -86,6 +87,8 @@ export default function AgreementDetailPage() {
   const [editPartyRole, setEditPartyRole] = useState("Client");
   const [isSaving, setIsSaving] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [sendDrawerOpen, setSendDrawerOpen] = useState(false);
+  const [sendForm] = Form.useForm();
   const [isSigning, setIsSigning] = useState(false);
   const [isSharingReview, setIsSharingReview] = useState(false);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -208,37 +211,38 @@ export default function AgreementDetailPage() {
   };
 
   const handleSend = () => {
-    Modal.confirm({
-      title: "Send for Signing",
-      content: (
-        <div>
-          <p className="text-sm text-zinc-600 mb-2">
-            Once sent, the document content will be locked and cannot be edited.
-          </p>
-          <p className="text-sm text-zinc-600">
-            Share the link with your <strong>{agreement?.externalPartyRole || "Client"}</strong> for their signature, then sign internally.
-          </p>
-        </div>
-      ),
-      okText: "Send for Signing",
-      onOk: async () => {
-        setIsSending(true);
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/v1/agreements/${agreementId}/send`, {
-            method: "POST",
-            headers: authHeaders(),
-          });
-          if (!res.ok) throw new Error();
-          const json = await res.json();
-          dispatch(updateCurrentAgreement(json.data));
-          message.success("Sent for signing! Share the link with your client.");
-        } catch {
-          message.error("Failed to send");
-        } finally {
-          setIsSending(false);
-        }
-      },
-    });
+    // Pre-fill client email from the linked account if available.
+    const prefillEmail = (agreement as never as { clientEmail?: string })?.clientEmail || "";
+    const prefillName = agreement?.clientName || "";
+    sendForm.setFieldsValue({ clientEmail: prefillEmail, clientName: prefillName, message: "" });
+    setSendDrawerOpen(true);
+  };
+
+  const handleSendSubmit = async () => {
+    try {
+      const values = await sendForm.validateFields();
+      setIsSending(true);
+      const res = await fetch(`${API_BASE_URL}/api/v1/agreements/${agreementId}/send`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientEmail: values.clientEmail,
+          clientName: values.clientName || null,
+          message: values.message || null,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+      const json = await res.json();
+      dispatch(updateCurrentAgreement(json.data));
+      setSendDrawerOpen(false);
+      sendForm.resetFields();
+      message.success(`Signing invite sent to ${values.clientEmail}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to send";
+      message.error(msg);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleSignInternal = () => {
@@ -697,6 +701,67 @@ export default function AgreementDetailPage() {
         )}
       </div>
 
+      {/* Email History */}
+      {(isSent || isFullySigned) && (
+        <EmailHistorySection agreementId={agreementId} />
+      )}
+
+      {/* Send for Signing Drawer */}
+      <Drawer
+        title={
+          <div className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-zinc-500" />
+            <span>Send for Signing</span>
+          </div>
+        }
+        open={sendDrawerOpen}
+        width={480}
+        onClose={() => { setSendDrawerOpen(false); sendForm.resetFields(); }}
+        destroyOnClose
+        footer={
+          <Space className="w-full justify-end">
+            <Button onClick={() => { setSendDrawerOpen(false); sendForm.resetFields(); }}>
+              Cancel
+            </Button>
+            <Button type="primary" onClick={handleSendSubmit} loading={isSending} icon={<Send className="w-3.5 h-3.5" />}>
+              Send Invite
+            </Button>
+          </Space>
+        }
+      >
+        <Form form={sendForm} layout="vertical">
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            Once sent, the document content will be <strong>locked</strong> and cannot be edited.
+          </div>
+
+          <Form.Item
+            name="clientEmail"
+            label="Client Email"
+            rules={[
+              { required: true, message: "Email is required" },
+              { type: "email", message: "Enter a valid email" },
+            ]}
+          >
+            <Input placeholder="client@example.com" prefix={<Mail className="w-3.5 h-3.5 text-zinc-400" />} />
+          </Form.Item>
+
+          <Form.Item name="clientName" label="Client Name (optional)">
+            <Input placeholder="e.g. John Smith" />
+          </Form.Item>
+
+          <Form.Item name="message" label="Personal Message (optional)">
+            <Input.TextArea
+              rows={3}
+              placeholder="Add a personal note to include in the email…"
+            />
+          </Form.Item>
+
+          <div className="text-xs text-zinc-400 mt-1">
+            The signing link and document details will be included automatically.
+          </div>
+        </Form>
+      </Drawer>
+
       {/* Audit trail */}
       {(isSent || isFullySigned) && (
         <div>
@@ -726,6 +791,97 @@ export default function AgreementDetailPage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Email History Section ──────────────────────────────────────────────────
+
+interface EmailLogEntry {
+  id: string;
+  toEmail: string;
+  toName?: string | null;
+  subject: string;
+  templateLabel: string;
+  status: "sent" | "failed";
+  error?: string | null;
+  sentAt: string;
+}
+
+function EmailHistorySection({ agreementId }: { agreementId: string }) {
+  const [logs, setLogs] = useState<EmailLogEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const token = typeof window !== "undefined"
+        ? localStorage.getItem("access_token") || sessionStorage.getItem("access_token")
+        : null;
+      const res = await fetch(`${API_BASE_URL}/api/v1/agreements/${agreementId}/email-log`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setLogs(json.data || []);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        onClick={() => { if (!visible) load(); setVisible((v) => !v); }}
+        className="flex items-center gap-2 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors"
+      >
+        <Mail className="w-3.5 h-3.5" />
+        {visible ? "Hide" : "View"} Email History
+      </button>
+
+      {visible && (
+        <div className="border border-zinc-200 rounded-xl overflow-hidden">
+          {loading ? (
+            <div className="py-6 text-center text-sm text-zinc-400">Loading…</div>
+          ) : logs.length === 0 ? (
+            <div className="py-6 text-center text-sm text-zinc-400">No emails sent yet.</div>
+          ) : (
+            logs.map((log) => (
+              <div
+                key={log.id}
+                className="flex items-start gap-3 px-5 py-3 border-b border-zinc-50 last:border-0 bg-white"
+              >
+                <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                  {log.status === "sent"
+                    ? <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    : <XCircle className="w-4 h-4 text-red-400" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-zinc-800">{log.templateLabel}</span>
+                    <span className="text-[10px] text-zinc-400">to {log.toName ? `${log.toName} <${log.toEmail}>` : log.toEmail}</span>
+                    <Tag
+                      color={log.status === "sent" ? "green" : "red"}
+                      className="!rounded-full !text-[10px] !px-2 !py-0 !leading-none"
+                    >
+                      {log.status}
+                    </Tag>
+                  </div>
+                  {log.error && (
+                    <p className="text-[10px] text-red-400 mt-0.5 truncate">{log.error}</p>
+                  )}
+                </div>
+                <span className="text-[10px] text-zinc-400 shrink-0">
+                  {new Date(log.sentAt).toLocaleString()}
+                </span>
+              </div>
+            ))
           )}
         </div>
       )}

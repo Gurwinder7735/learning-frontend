@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Input, Select, Space, Tag, Card, Row, Col, Statistic, Typography, Drawer, Form, DatePicker, Switch, message } from "antd";
-import { Calendar, Plus, Loader2, Video, Clock, Users } from "lucide-react";
+import { Button, Input, Select, Space, Tag, Card, Row, Col, Statistic, Typography, message } from "antd";
+import { MeetingFormDrawer, type MeetingFormValues } from "@/components/features/Meetings/MeetingFormDrawer";
+import { Calendar, Plus, Loader2, Video, Clock, Users, Building2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
@@ -14,6 +15,10 @@ import {
 import {
   selectMeetings, selectMeetingsLoading, selectMeetingStats, selectGoogleConnected,
 } from "@/store/modules/meetings/meetingsSelectors";
+import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
+import { selectClients, selectClientsMeta } from "@/store/modules/clients/clientsSelectors";
+import { fetchLeadsRequest } from "@/store/modules/leads/leadsSlice";
+import { selectLeads, selectLeadsMeta } from "@/store/modules/leads/leadsSelectors";
 import { APP_ROUTES } from "@/lib/constants/appConstants";
 
 const statusColors: Record<string, string> = {
@@ -40,14 +45,30 @@ export default function MeetingsPage() {
   const stats = useAppSelector(selectMeetingStats);
   const googleConnected = useAppSelector(selectGoogleConnected);
 
+  const clients = useAppSelector(selectClients);
+  const clientsMeta = useAppSelector(selectClientsMeta);
+  const leads = useAppSelector(selectLeads);
+  const leadsMeta = useAppSelector(selectLeadsMeta);
+
+  // Unified accounts list for the meeting form's account picker.
+  const allAccounts = [
+    ...leads
+      .filter((l) => l.lifecycleStage !== "client")
+      .map((l) => ({ id: l.id, companyName: `${l.companyName} (Lead)`, originStage: "lead" as const })),
+    ...clients.map((c) => ({ id: c.id, companyName: c.companyName, originStage: "client" as const })),
+  ];
+  const accountsLoading = clientsMeta.isLoading || leadsMeta.isLoading;
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     dispatch(fetchMeetingsRequest({ search, status: statusFilter }));
     dispatch(fetchMeetingStatsRequest());
+    dispatch(fetchClientsRequest({ limit: 200 }));
+    dispatch(fetchLeadsRequest({ limit: 200 }));
     dispatch(fetchGoogleStatusRequest());
   }, [dispatch, search, statusFilter]);
 
@@ -59,26 +80,22 @@ export default function MeetingsPage() {
     }
   }, [searchParams, dispatch, router]);
 
-  const handleCreate = async () => {
-    try {
-      const values = await form.validateFields();
-      const meetingDate = values.meetingDate.toISOString();
-      dispatch(createMeetingRequest({
-        title: values.title,
-        meetingType: values.meetingType || "other",
-        meetingDate,
-        durationMinutes: values.durationMinutes || 60,
-        summary: values.summary || null,
-        attendees: values.attendees || [],
-        location: values.location || null,
-        generateMeetLink: values.generateMeetLink || false,
-      }));
-      setDrawerOpen(false);
-      form.resetFields();
-      message.success("Meeting created successfully");
-    } catch {
-      // validation failed
-    }
+  const handleCreate = (values: MeetingFormValues) => {
+    const selectedAccount = allAccounts.find((a) => a.id === values.clientId);
+    dispatch(createMeetingRequest({
+      title: values.title,
+      meetingType: values.meetingType || "other",
+      meetingDate: values.meetingDate.toISOString(),
+      durationMinutes: values.durationMinutes || 60,
+      summary: values.summary || null,
+      attendees: values.attendees || [],
+      location: values.location || null,
+      generateMeetLink: values.generateMeetLink || false,
+      clientId: values.clientId || null,
+      clientName: selectedAccount?.companyName?.replace(" (Lead)", "") || null,
+    }));
+    setDrawerOpen(false);
+    message.success("Meeting created successfully");
   };
 
   return (
@@ -150,7 +167,7 @@ export default function MeetingsPage() {
                     </Tag>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-zinc-400 mb-2">
+                <div className="flex items-center gap-3 text-xs text-zinc-400 mb-2 flex-wrap">
                   <span className="inline-flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
                     {new Date(meeting.meetingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -159,6 +176,12 @@ export default function MeetingsPage() {
                     <span className="inline-flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {meeting.durationMinutes} min
+                    </span>
+                  )}
+                  {(meeting.clientName || meeting.clientId) && (
+                    <span className="inline-flex items-center gap-1 text-blue-600 font-medium">
+                      <Building2 className="w-3 h-3" />
+                      {meeting.clientName || "Linked Account"}
                     </span>
                   )}
                   {meeting.summary && (
@@ -193,45 +216,16 @@ export default function MeetingsPage() {
         )}
       </div>
 
-      <Drawer title="New Meeting" width={520} open={drawerOpen} onClose={() => setDrawerOpen(false)}
-        footer={<Space className="w-full justify-end"><Button onClick={() => setDrawerOpen(false)}>Cancel</Button><Button type="primary" onClick={handleCreate}>Create Meeting</Button></Space>}
-        destroyOnClose>
-        <Form form={form} layout="vertical">
-          <Form.Item name="title" label="Title" rules={[{ required: true, message: "Required" }]}>
-            <Input placeholder="Meeting title" />
-          </Form.Item>
-          <Form.Item name="meetingType" label="Type" initialValue="other">
-            <Select options={[
-              { value: "client_meeting", label: "Client Meeting" },
-              { value: "internal", label: "Internal" },
-              { value: "discovery", label: "Discovery" },
-              { value: "review", label: "Review" },
-              { value: "kickoff", label: "Kickoff" },
-              { value: "other", label: "Other" },
-            ]} />
-          </Form.Item>
-          <Form.Item name="meetingDate" label="Date & Time" rules={[{ required: true, message: "Required" }]}>
-            <DatePicker showTime className="w-full" />
-          </Form.Item>
-          <Form.Item name="durationMinutes" label="Duration (minutes)" initialValue={60}>
-            <Input type="number" min={15} max={480} />
-          </Form.Item>
-          <Form.Item name="summary" label="Summary">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-          <Form.Item name="attendees" label="Attendees">
-            <Select mode="tags" placeholder="Type email and press Enter" tokenSeparators={[",", ";", " "]} open={false} />
-          </Form.Item>
-          <Form.Item name="location" label="Location">
-            <Input placeholder="Room or virtual link" />
-          </Form.Item>
-          {googleConnected && (
-            <Form.Item name="generateMeetLink" label="Generate Google Meet Link" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          )}
-        </Form>
-      </Drawer>
+      <MeetingFormDrawer
+        open={drawerOpen}
+        mode="create"
+        accounts={allAccounts}
+        accountsLoading={accountsLoading}
+        googleConnected={googleConnected}
+        submitting={submitting}
+        onSubmit={handleCreate}
+        onClose={() => setDrawerOpen(false)}
+      />
     </div>
   );
 }

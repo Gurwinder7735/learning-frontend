@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { Button, Tag, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, DatePicker, Drawer, message, Divider, List, Checkbox } from "antd";
-import { ArrowLeft, Calendar, Edit3, Trash2, Video, ExternalLink, Clock, Users, CheckCircle, Sparkles, X } from "lucide-react";
+import { Button, Tag, Tabs, Space, Typography, Spin, Modal, Form, Input as AntInput, Select, DatePicker, message, Divider, List, Checkbox } from "antd";
+import { MeetingFormDrawer, type MeetingFormValues } from "@/components/features/Meetings/MeetingFormDrawer";
+import { ArrowLeft, Building2, Calendar, Edit3, Trash2, Video, ExternalLink, Clock, Users, CheckCircle, Sparkles, X } from "lucide-react";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import MeetingTranscriptTab from "@/components/meetings/MeetingTranscriptTab";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
@@ -21,6 +22,10 @@ import {
 import { APP_ROUTES } from "@/lib/constants/appConstants";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { storage } from "@/lib/utils/storage";
+import { fetchClientsRequest } from "@/store/modules/clients/clientsSlice";
+import { selectClients, selectClientsMeta } from "@/store/modules/clients/clientsSelectors";
+import { fetchLeadsRequest } from "@/store/modules/leads/leadsSlice";
+import { selectLeads, selectLeadsMeta } from "@/store/modules/leads/leadsSelectors";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -58,12 +63,24 @@ export default function MeetingDetailPage() {
   const detail = useAppSelector(selectMeetingDetail);
   const loading = useAppSelector(selectMeetingDetailLoading);
   const googleConnected = useAppSelector(selectGoogleConnected);
+  const clients = useAppSelector(selectClients);
+  const clientsMeta = useAppSelector(selectClientsMeta);
+  const leads = useAppSelector(selectLeads);
+  const leadsMeta = useAppSelector(selectLeadsMeta);
+
+  // AccountOption-shaped list for the MeetingFormDrawer picker.
+  const allAccounts = [
+    ...leads
+      .filter((l) => l.lifecycleStage !== "client")
+      .map((l) => ({ id: l.id, companyName: `${l.companyName} (Lead)`, originStage: "lead" as const })),
+    ...clients.map((c) => ({ id: c.id, companyName: c.companyName, originStage: "client" as const })),
+  ];
+  const accountsLoading = clientsMeta.isLoading || leadsMeta.isLoading;
 
   const meetingId = params.meetingId as string;
   const meeting = detail?.meeting ?? null;
 
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
-  const [editForm] = Form.useForm();
   const [decisionText, setDecisionText] = useState("");
   const [actionTitle, setActionTitle] = useState("");
 
@@ -88,6 +105,8 @@ export default function MeetingDetailPage() {
   useEffect(() => {
     if (meetingId) dispatch(fetchMeetingDetailRequest(meetingId));
     dispatch(fetchGoogleStatusRequest());
+    dispatch(fetchClientsRequest({ limit: 200 }));
+    dispatch(fetchLeadsRequest({ limit: 200 }));
     return () => {
       dispatch(clearMeetingDetail());
       esRef.current?.close();
@@ -237,23 +256,23 @@ export default function MeetingDetailPage() {
     }
   };
 
-  const handleUpdate = async () => {
-    try {
-      const values = await editForm.validateFields();
-      const data: Record<string, unknown> = {};
-      if (values.title) data.title = values.title;
-      if (values.meetingType) data.meetingType = values.meetingType;
-      if (values.status) data.status = values.status;
-      if (values.summary !== undefined) data.summary = values.summary;
-      if (values.meetingDate) data.meetingDate = values.meetingDate.toISOString();
-      if (values.durationMinutes) data.durationMinutes = values.durationMinutes;
-      if (values.attendees !== undefined) {
-        data.attendees = values.attendees || [];
-      }
-      if (values.location !== undefined) data.location = values.location;
-      dispatch(updateMeetingRequest({ id: meetingId, data }));
-      setEditDrawerOpen(false);
-    } catch {}
+  const handleUpdate = (values: MeetingFormValues) => {
+    const data: Record<string, unknown> = {};
+    if (values.title) data.title = values.title;
+    if (values.meetingType) data.meetingType = values.meetingType;
+    if (values.status) data.status = values.status;
+    if (values.summary !== undefined) data.summary = values.summary;
+    if (values.meetingDate) data.meetingDate = values.meetingDate.toISOString();
+    if (values.durationMinutes) data.durationMinutes = values.durationMinutes;
+    if (values.attendees !== undefined) data.attendees = values.attendees || [];
+    if (values.location !== undefined) data.location = values.location;
+    if ("clientId" in values) {
+      data.clientId = values.clientId || null;
+      const selected = allAccounts.find((a) => a.id === values.clientId);
+      data.clientName = selected ? selected.companyName.replace(" (Lead)", "") : null;
+    }
+    dispatch(updateMeetingRequest({ id: meetingId, data }));
+    setEditDrawerOpen(false);
   };
 
   const handleDelete = () => {
@@ -625,6 +644,24 @@ export default function MeetingDetailPage() {
               <Typography.Text className="text-zinc-500 text-sm block mt-1">
                 {new Date(meeting.meetingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
               </Typography.Text>
+              {meeting.clientName && (
+                <button
+                  onClick={() => {
+                    if (meeting.clientId) {
+                      const lead = leads.find((l) => l.id === meeting.clientId);
+                      router.push(
+                        lead && lead.lifecycleStage !== "client"
+                          ? `${APP_ROUTES.leads}/${meeting.clientId}`
+                          : `${APP_ROUTES.clients}/${meeting.clientId}`
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 mt-1 hover:underline"
+                >
+                  <Building2 className="w-3 h-3" />
+                  {meeting.clientName}
+                </button>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
@@ -635,10 +672,7 @@ export default function MeetingDetailPage() {
             )}
             {/* Generate / Regenerate button lives on the AI Summary tab so
                 the two summary sources (manual vs AI) don't collide here. */}
-            <Button icon={<Edit3 className="w-4 h-4" />} onClick={() => {
-              editForm.setFieldsValue({ ...meeting, meetingDate: dayjs(meeting.meetingDate) });
-              setEditDrawerOpen(true);
-            }}>Edit</Button>
+            <Button icon={<Edit3 className="w-4 h-4" />} onClick={() => setEditDrawerOpen(true)}>Edit</Button>
             <Button danger icon={<Trash2 className="w-4 h-4" />} onClick={handleDelete}>Delete</Button>
           </div>
         </div>
@@ -708,47 +742,16 @@ export default function MeetingDetailPage() {
         </Form>
       </Modal>
 
-      <Drawer
-        title="Edit Meeting"
-        width={520}
+      <MeetingFormDrawer
         open={editDrawerOpen}
+        mode="edit"
+        meeting={meeting}
+        accounts={allAccounts}
+        accountsLoading={accountsLoading}
+        googleConnected={googleConnected}
+        onSubmit={handleUpdate}
         onClose={() => setEditDrawerOpen(false)}
-        footer={
-          <Space className="w-full justify-end">
-            <Button onClick={() => setEditDrawerOpen(false)}>Cancel</Button>
-            <Button type="primary" onClick={handleUpdate}>Save Changes</Button>
-          </Space>
-        }
-        destroyOnClose
-      >
-        <Form form={editForm} layout="vertical">
-          <Form.Item name="title" label="Title" rules={[{ required: true, message: "Required" }]}><AntInput /></Form.Item>
-          <Form.Item name="meetingType" label="Type">
-            <Select options={[
-              { value: "client_meeting", label: "Client Meeting" },
-              { value: "internal", label: "Internal" },
-              { value: "discovery", label: "Discovery" },
-              { value: "review", label: "Review" },
-              { value: "kickoff", label: "Kickoff" },
-              { value: "other", label: "Other" },
-            ]} />
-          </Form.Item>
-          <Form.Item name="status" label="Status">
-            <Select options={[
-              { value: "scheduled", label: "Scheduled" },
-              { value: "completed", label: "Completed" },
-              { value: "cancelled", label: "Cancelled" },
-            ]} />
-          </Form.Item>
-          <Form.Item name="meetingDate" label="Date & Time"><DatePicker showTime className="w-full" /></Form.Item>
-          <Form.Item name="durationMinutes" label="Duration (minutes)"><AntInput type="number" min={15} /></Form.Item>
-          <Form.Item name="summary" label="Summary"><AntInput.TextArea rows={3} /></Form.Item>
-          <Form.Item name="attendees" label="Attendees">
-            <Select mode="tags" placeholder="Type email and press Enter" tokenSeparators={[",", ";", " "]} open={false} />
-          </Form.Item>
-          <Form.Item name="location" label="Location"><AntInput /></Form.Item>
-        </Form>
-      </Drawer>
+      />
     </div>
   );
 }
