@@ -215,12 +215,16 @@ export default function SharedProposalPage() {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">
                   Prepared By
                 </p>
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-zinc-400" />
-                  <p className="text-sm font-semibold text-zinc-800">
-                    {proposal.preparedBy || companyName}
-                  </p>
-                </div>
+                {proposal.preparedBy ? (
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-zinc-400" />
+                    <p className="text-sm font-semibold text-zinc-800">{proposal.preparedBy}</p>
+                  </div>
+                ) : logoUrl ? (
+                  <img src={logoUrl} alt={companyName} className="h-8 w-auto object-contain" />
+                ) : (
+                  <p className="text-sm font-semibold text-zinc-800">{companyName}</p>
+                )}
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">
