@@ -230,12 +230,7 @@ export default function SOWSharePage() {
                 <FileSearch className="w-4 h-4 text-white" />
               </div>
             )}
-            {branding?.companyName && (
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-zinc-900 leading-none truncate">{branding.companyName}</p>
-                {branding.tagline && <p className="text-[11px] text-zinc-400 leading-none mt-0.5 truncate">{branding.tagline}</p>}
-              </div>
-            )}
+            {/* Company name intentionally hidden — logo is the brand identifier */}
           </div>
           <span className="hidden sm:block text-xs text-zinc-400">Product Discovery · Read-only</span>
         </div>
