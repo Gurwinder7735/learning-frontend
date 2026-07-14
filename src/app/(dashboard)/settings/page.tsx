@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Input, Typography, Spin, message, Upload } from "antd";
-import { Save, Calendar, CheckCircle, XCircle, PlugZap, Palette, UploadCloud, X, PenLine } from "lucide-react";
+import { Button, Input, Spin, Switch, message, Upload } from "antd";
+import { Save, Calendar, CheckCircle, XCircle, PlugZap, Palette, UploadCloud, Mail, PenLine, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { storage } from "@/lib/utils/storage";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
@@ -24,13 +24,51 @@ interface Branding {
   officialSignatoryName: string;
   officialSignatoryTitle: string;
   officialSignatoryEmail: string;
+  // SMTP override fields
+  smtpServer?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  smtpFromEmail?: string;
+  smtpPasswordSet?: boolean;
+  smtpUseTls?: boolean;
 }
 
 const NAV_ITEMS = [
   { key: "integrations", icon: PlugZap, label: "Integrations" },
   { key: "branding", icon: Palette, label: "Branding" },
   { key: "signatory", icon: PenLine, label: "Signatory" },
+  { key: "email", icon: Mail, label: "Email / SMTP" },
 ];
+
+/** Consistent label used throughout settings panels. */
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide block mb-1">
+      {children}
+    </label>
+  );
+}
+
+/** Section header — icon + title + description. */
+function SectionHeader({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-3 mb-1">
+        <Icon className="w-5 h-5 text-zinc-500" />
+        <h3 className="text-base font-semibold text-zinc-800 m-0">{title}</h3>
+      </div>
+      <p className="text-sm text-zinc-400 mt-1">{description}</p>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const dispatch = useAppDispatch();
@@ -404,17 +442,223 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="flex justify-end mt-8 pt-6 border-t border-zinc-100">
-            <Button
-              type="primary"
-              icon={<Save className="w-4 h-4" />}
-              loading={savingBranding}
-              onClick={handleSaveBranding}
-            >
-              {activeTab === "signatory" ? "Save Signatory" : "Save Branding"}
-            </Button>
+          {activeTab === "email" && (
+            <SmtpSettingsPanel branding={branding} onSaved={(updated) => setBranding((b) => ({ ...b, ...updated }))} />
+          )}
+
+          {activeTab !== "email" && (
+            <div className="flex justify-end mt-8 pt-6 border-t border-zinc-100">
+              <Button
+                type="primary"
+                icon={<Save className="w-4 h-4" />}
+                loading={savingBranding}
+                onClick={handleSaveBranding}
+              >
+                {activeTab === "signatory" ? "Save Signatory" : "Save Branding"}
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SMTP Settings Panel ────────────────────────────────────────────────────
+
+interface SmtpFormState {
+  server: string;
+  port: string;
+  username: string;
+  fromEmail: string;
+  password: string;
+  useTls: boolean;
+}
+
+function SmtpSettingsPanel({
+  branding,
+  onSaved,
+}: {
+  branding: Branding;
+  onSaved: (updated: Partial<Branding>) => void;
+}) {
+  const [form, setForm] = useState<SmtpFormState>({
+    server:    branding.smtpServer   || "",
+    port:      branding.smtpPort?.toString() || "",
+    username:  branding.smtpUsername  || "",
+    fromEmail: branding.smtpFromEmail || "",
+    password:  "",
+    useTls:    branding.smtpUseTls !== false,
+  });
+  const [saving,     setSaving]     = useState(false);
+  const [testing,    setTesting]    = useState(false);
+  const [testResult, setTestResult] = useState<"success" | "failed" | null>(null);
+
+  const set = (key: keyof SmtpFormState) =>
+    (value: string | boolean) => setForm((f) => ({ ...f, [key]: value }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const token = storage.getAccessToken();
+      const body: Record<string, unknown> = {
+        smtp_server:     form.server    || null,
+        smtp_port:       form.port      ? parseInt(form.port) : null,
+        smtp_username:   form.username  || null,
+        smtp_from_email: form.fromEmail || null,
+        smtp_use_tls:    form.useTls,
+      };
+      if (form.password) body.smtp_password = form.password;
+
+      const res = await fetch(`${API_BASE_URL}/api/v1/branding`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Save failed");
+
+      onSaved({
+        smtpServer:   form.server,
+        smtpPort:     form.port ? parseInt(form.port) : undefined,
+        smtpUsername: form.username,
+        smtpFromEmail: form.fromEmail,
+        smtpUseTls:   form.useTls,
+        smtpPasswordSet: !!form.password || branding.smtpPasswordSet,
+      });
+      message.success("SMTP settings saved");
+    } catch {
+      message.error("Failed to save SMTP settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const token = storage.getAccessToken();
+      const res = await fetch(`${API_BASE_URL}/api/v1/branding/test-email`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        setTestResult("success");
+        message.success("Test email sent — check your inbox");
+      } else {
+        setTestResult("failed");
+        message.error("Test email failed — check SMTP settings");
+      }
+    } catch {
+      setTestResult("failed");
+      message.error("Test email failed");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div>
+      <SectionHeader
+        icon={Mail}
+        title="Email / SMTP"
+        description="Configure the SMTP server used to send signing invites and notifications. Leave fields empty to use the server defaults."
+      />
+
+      <div className="space-y-5 max-w-md">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <FieldLabel>SMTP Server</FieldLabel>
+            <Input
+              value={form.server}
+              onChange={(e) => set("server")(e.target.value)}
+              placeholder="smtp.hostinger.com"
+            />
+          </div>
+          <div>
+            <FieldLabel>Port</FieldLabel>
+            <Input
+              type="number"
+              value={form.port}
+              onChange={(e) => set("port")(e.target.value)}
+              placeholder="587"
+            />
           </div>
         </div>
+
+        <div>
+          <FieldLabel>SMTP Username</FieldLabel>
+          <Input
+            value={form.username}
+            onChange={(e) => set("username")(e.target.value)}
+            placeholder="contact@company.com"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>From Email (shown to recipient)</FieldLabel>
+          <Input
+            value={form.fromEmail}
+            onChange={(e) => set("fromEmail")(e.target.value)}
+            placeholder="noreply@company.com"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>
+            Password{" "}
+            {branding.smtpPasswordSet && (
+              <span className="text-zinc-300 font-normal normal-case">
+                (currently set — leave blank to keep)
+              </span>
+            )}
+          </FieldLabel>
+          <Input.Password
+            value={form.password}
+            onChange={(e) => set("password")(e.target.value)}
+            placeholder="Enter new password to change"
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={form.useTls}
+            onChange={(checked) => set("useTls")(checked)}
+            size="small"
+          />
+          <span className="text-sm text-zinc-700">Use STARTTLS (recommended)</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 mt-8 pt-6 border-t border-zinc-100">
+        <Button onClick={handleTest} loading={testing} icon={<Mail className="w-3.5 h-3.5" />}>
+          Send Test Email
+        </Button>
+
+        {testResult === "success" && (
+          <span className="inline-flex items-center gap-1 text-sm text-emerald-600 font-medium">
+            <CheckCircle2 className="w-4 h-4" /> Sent!
+          </span>
+        )}
+        {testResult === "failed" && (
+          <span className="inline-flex items-center gap-1 text-sm text-red-500 font-medium">
+            <XCircle className="w-4 h-4" /> Failed
+          </span>
+        )}
+
+        <div className="flex-1" />
+
+        <Button
+          type="primary"
+          icon={<Save className="w-4 h-4" />}
+          loading={saving}
+          onClick={handleSave}
+        >
+          Save SMTP Settings
+        </Button>
       </div>
     </div>
   );

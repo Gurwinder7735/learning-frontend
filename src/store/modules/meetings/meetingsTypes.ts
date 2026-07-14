@@ -10,6 +10,7 @@ export interface MeetingQuery {
 }
 
 export interface CreateMeetingPayload {
+  clientName?: string | null;
   title: string;
   leadId?: string | null;
   clientId?: string | null;
