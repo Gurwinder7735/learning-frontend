@@ -139,3 +139,14 @@
   border: none !important;
   box-shadow: none !important;
 }
+
+/* ── Apex Agent chat widget ─────────────────────────────────────────────── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* Remove Ant Button default hover bg for custom icon buttons in dark header */
+.ant-btn-text.hover\:bg-white\/10:hover {
+  background: rgba(255,255,255,0.1) !important;
+}

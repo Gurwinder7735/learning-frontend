@@ -10,6 +10,8 @@ import brdReducer from "@/store/modules/brd/brdSlice";
 import proposalsReducer from "@/store/modules/proposals/proposalsSlice";
 import agreementsReducer from "@/store/modules/agreements/agreementsSlice";
 import sowReducer from "@/store/modules/sow/sowSlice";
+import browserAgentReducer from "@/store/modules/browserAgent/browserAgentSlice";
+import aiLeadFinderReducer from "@/store/modules/aiLeadFinder/aiLeadFinderSlice";
 
 const rootReducer = combineReducers({
   auth: authReducer,
@@ -23,6 +25,8 @@ const rootReducer = combineReducers({
   proposals: proposalsReducer,
   agreements: agreementsReducer,
   sow: sowReducer,
+  browserAgent: browserAgentReducer,
+  aiLeadFinder: aiLeadFinderReducer,
 });
 
 export default rootReducer;
