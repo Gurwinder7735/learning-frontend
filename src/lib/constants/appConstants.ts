@@ -15,6 +15,7 @@ export const APP_ROUTES = {
   agreements: "/agreements",
   sow: "/sow",
   leads: "/leads",
+  leadFinder: "/lead-finder",
   roles: "/roles",
   users: "/users",
   settings: "/settings",

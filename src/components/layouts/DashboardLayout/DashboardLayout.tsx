@@ -24,8 +24,10 @@ import {
   FilePen,
   Search,
   FileText,
+  Crosshair,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { BrowserAgentButton, BrowserAgentPanel } from "@/components/features/BrowserAgent";
 
 function UserAvatar({ name, email }: { name: string; email: string }) {
   const initials = (name || email || "U").slice(0, 2).toUpperCase();
@@ -51,6 +53,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     { name: "Dashboard", href: APP_ROUTES.dashboard, icon: LayoutDashboard },
     { name: "Reports", href: APP_ROUTES.reports, icon: BarChart2 },
     ...(can("leads", "view") ? [{ name: "Leads", href: APP_ROUTES.leads, icon: Target }] : []),
+    ...(can("leads", "create") ? [{ name: "Lead Finder", href: APP_ROUTES.leadFinder, icon: Crosshair }] : []),
     ...(can("clients", "view")
       ? [{ name: "Clients", href: APP_ROUTES.clients, icon: Building2 }]
       : []),
@@ -263,6 +266,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Browser Agent floating button + panel — visible on all dashboard pages */}
+      <BrowserAgentButton />
+      <BrowserAgentPanel />
     </div>
   );
 }
